@@ -4,6 +4,10 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  schedule:
+    # 06:00 WIB (UTC+7) daily = 23:00 UTC the previous day
+    - cron: '0 23 * * *'
+  workflow_dispatch:
 jobs:
   test:
     timeout-minutes: 60
@@ -25,3 +29,25 @@ jobs:
         name: playwright-report
         path: playwright-report/
         retention-days: 30
+    - name: Notify Discord
+      if: always()
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        JOB_STATUS: ${{ job.status }}
+        BRANCH: ${{ github.ref_name }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        if [ "$JOB_STATUS" = "success" ]; then
+          COLOR=3066993
+          TITLE="✅ Playwright Tests passed"
+        else
+          COLOR=15158332
+          TITLE="❌ Playwright Tests failed"
+        fi
+        PAYLOAD=$(jq -n \
+          --arg title "$TITLE" \
+          --arg branch "$BRANCH" \
+          --arg url "$RUN_URL" \
+          --argjson color "$COLOR" \
+          '{embeds: [{title: $title, description: ("Branch: `" + $branch + "`\nRun: " + $url), color: $color}]}')
+        curl -sfS -H "Content-Type: application/json" -X POST "$DISCORD_WEBHOOK" -d "$PAYLOAD"
