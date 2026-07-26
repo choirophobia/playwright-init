@@ -3,26 +3,19 @@ import { LoginPage } from '../pages/LoginPage';
 import { InventoryPage } from '../pages/InventoryPage';
 import { CartPage } from '../pages/CartPage';
 import { CheckoutPage } from '../pages/CheckoutPage';
-// test('has title', async ({ page }) => {
-//   await page.goto('https://playwright.dev/');
 
-//   // Expect a title "to contain" a substring.
-//   await expect(page).toHaveTitle(/Playwright/);
-// });
-
-test('login scenario', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   const login = new LoginPage(page);
   await page.goto('/');
   await login.login('standard_user', 'secret_sauce');
-  await expect(page).toHaveURL(/inventory/);
+});
 
+test('login scenario', async ({ page }) => {
+  await expect(page).toHaveURL(/inventory/);
 });
 
 
 test('login, add to cart 2 items, checkout', async({ page }) => {
-  const login = new LoginPage(page);
-  await page.goto('/');
-  await login.login('standard_user', 'secret_sauce');
   const inventory = new InventoryPage(page);
   await inventory.clickAddToCart(1);
   await inventory.clickAddToCart(2);
@@ -37,10 +30,6 @@ test('login, add to cart 2 items, checkout', async({ page }) => {
 
 
 test('login, manage cart items, checkout, and reach thank you page', async ({ page }) => {
-  const login = new LoginPage(page);
-  await page.goto('/');
-  await login.login('standard_user', 'secret_sauce');
-
   const inventory = new InventoryPage(page);
   await inventory.clickAddToCart(1);
   await inventory.clickAddToCart(2);
