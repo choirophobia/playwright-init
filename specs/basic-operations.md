@@ -230,6 +230,18 @@ Swag Labs (SauceDemo, https://www.saucedemo.com) is a demo e-commerce app used f
     - expect: User is returned to the Products/inventory page
     - expect: The cart badge still reflects the item(s) added earlier (order was not completed and cart was not cleared)
 
+#### 4.5. Checkout information step accepts whitespace-only field values (validation gap)
+
+**File:** `tests/checkout/checkout-whitespace-fields.spec.ts`
+
+**Steps:**
+  1. Start from a fresh browser state, navigate to https://www.saucedemo.com, log in with standard_user / secret_sauce, add an item to the cart, open the cart, and click 'Checkout'
+    - expect: User is on the 'Checkout: Your Information' step
+  2. Enter three spaces (`'   '`) into First Name, Last Name, and Zip/Postal Code, then click 'Continue'
+    - expect: No error message is displayed
+    - expect: User advances to the 'Checkout: Overview' step (the required-field check only rejects an empty string, not whitespace-only input)
+    - expect: The order summary and price totals render normally despite the blank-looking shipping info
+
 ### 5. Logout
 
 **Seed:** `tests/seed.spec.ts`
