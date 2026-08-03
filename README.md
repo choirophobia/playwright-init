@@ -120,7 +120,7 @@ Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md
 | Area | Spec Files | Covers |
 |---|---|---|
 | **Login** | `tests/login/` (3) | Valid login, invalid credentials, empty-field validation |
-| **Inventory** | `tests/inventory/` (2) | Browsing products, sorting the catalog |
+| **Inventory** | `tests/inventory/` (6) | Browsing products, sorting the catalog, detail-page/grid cart-state sync, cart state surviving re-sorts, a Reset App State UI-desync gap, and an unguarded invalid product id |
 | **Cart** | `tests/cart/` (4) | Adding single/multiple items, removing items, viewing cart |
 | **Checkout** | `tests/checkout/` (5) | Completing orders (single/multiple items), required-field validation, cancelling checkout, whitespace-only field validation gap |
 | **Logout** | `tests/logout/` (2) | Logging out, logging out with items still in cart |
