@@ -90,6 +90,58 @@ Swag Labs (SauceDemo, https://www.saucedemo.com) is a demo e-commerce app used f
   4. Select 'Price (high to low)' from the sort dropdown
     - expect: Product list re-orders with 'Sauce Labs Fleece Jacket' ($49.99) first and 'Sauce Labs Onesie' ($7.99) last
 
+#### 2.3. Product detail page reflects and toggles cart state added from the grid
+
+**File:** `tests/inventory/detail-page-cart-sync.spec.ts`
+
+**Steps:**
+  1. Start from a fresh browser state, navigate to https://www.saucedemo.com, log in with standard_user / secret_sauce, and add 'Sauce Labs Backpack' to the cart from the Products grid
+    - expect: Cart badge shows '1'
+  2. Open the Sauce Labs Backpack product detail page
+    - expect: The detail page shows a 'Remove' button instead of 'Add to cart', since the item is already in the cart
+  3. Click 'Remove' directly on the detail page
+    - expect: The button reverts to 'Add to cart' and the cart badge disappears
+  4. Click 'Back to products'
+    - expect: The Sauce Labs Backpack tile on the grid also shows 'Add to cart', confirming the detail-page removal synced back to the grid
+
+#### 2.4. Add-to-cart button state stays attached to the correct product after re-sorting
+
+**File:** `tests/inventory/cart-state-persists-after-sort.spec.ts`
+
+**Steps:**
+  1. Start from a fresh browser state, navigate to https://www.saucedemo.com, log in with standard_user / secret_sauce, and add 'Sauce Labs Bike Light' to the cart while the list is in the default 'Name (A to Z)' order
+    - expect: The Bike Light tile shows 'Remove' and the cart badge shows '1'
+  2. Re-sort the list to 'Name (Z to A)'
+    - expect: The list re-orders, but the 'Remove' state stays correctly attached to Sauce Labs Bike Light rather than to whichever tile now occupies its old position; all other tiles still show 'Add to cart'
+  3. Re-sort again to 'Price (low to high)'
+    - expect: The Bike Light tile still shows 'Remove' regardless of its new position, and it is the only tile showing 'Remove'
+
+#### 2.5. Reset App State clears the cart but leaves a stale Remove button on the grid (UI desync gap)
+
+**File:** `tests/inventory/reset-app-state-stale-button.spec.ts`
+
+**Steps:**
+  1. Start from a fresh browser state, navigate to https://www.saucedemo.com, log in with standard_user / secret_sauce, and add 'Sauce Labs Bike Light' to the cart
+    - expect: The cart badge shows '1' and the tile shows 'Remove'
+  2. Open the hamburger menu and click 'Reset App State'
+    - expect: The cart badge is cleared immediately
+    - expect (validation gap): On the same, still-open grid, the Bike Light tile remains stuck showing 'Remove' even though the cart was just reset
+  3. Navigate to the Cart page
+    - expect: The cart is genuinely empty (0 items), proving the underlying state was reset correctly even though the grid button was not
+  4. Navigate back to the Products page
+    - expect: After this fresh page load, the Bike Light tile correctly shows 'Add to cart' again
+
+#### 2.6. Navigating to a non-existent product id shows an unguarded "ITEM NOT FOUND" detail page
+
+**File:** `tests/inventory/invalid-product-id.spec.ts`
+
+**Steps:**
+  1. Start from a fresh browser state, navigate to https://www.saucedemo.com, and log in with standard_user / secret_sauce
+  2. Navigate directly to a product detail URL with an id that does not correspond to any real product (e.g. /inventory-item.html?id=999)
+    - expect: The app does not redirect or error; it renders a broken placeholder detail page with the name 'ITEM NOT FOUND', a nonsensical price ('$√-1'), and a still-functional 'Add to cart' and 'Back to products' button
+  3. Click 'Back to products'
+    - expect: User safely returns to the real Products/inventory page showing all 6 products
+
 ### 3. Shopping Cart
 
 **Seed:** `tests/seed.spec.ts`
