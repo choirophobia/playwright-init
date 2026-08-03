@@ -41,8 +41,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   ├── logout/
 │   └── seed.spec.ts        # Blank seed test used by the AI test generator
 ├── specs/                  # Human-readable test plans (Markdown)
-│   ├── basic-operations.md
-│   └── deck-of-cards-api.md # API test plan (deckofcardsapi.com), not yet implemented as specs
+│   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace settings
 ├── .github/workflows/      # CI pipeline
 └── .mcp.json               # Playwright MCP server config
@@ -125,8 +124,6 @@ Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md
 | **Cart** | `tests/cart/` (4) | Adding single/multiple items, removing items, viewing cart |
 | **Checkout** | `tests/checkout/` (5) | Completing orders (single/multiple items), required-field validation, cancelling checkout, whitespace-only field validation gap |
 | **Logout** | `tests/logout/` (2) | Logging out, logging out with items still in cart |
-
-A separate plan for the [Deck of Cards API](https://deckofcardsapi.com/api/) exists at [`specs/deck-of-cards-api.md`](specs/deck-of-cards-api.md) (24 scenarios covering deck creation, drawing, piles, and the API's inconsistent error-handling behavior) but has not yet been implemented as spec files.
 
 ## Continuous Integration
 
