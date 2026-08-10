@@ -8,6 +8,9 @@ import { defineConfig, devices } from '@playwright/test';
 // import path from 'path';
 // dotenv.config({ path: path.resolve(__dirname, '.env') });
 
+/** Path where the logged-in storage state (cookies/localStorage) is cached by tests/auth.setup.ts */
+const authFile = 'playwright/.auth/standard_user.json';
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -35,18 +38,27 @@ export default defineConfig({
   /* Configure projects for major browsers */
   projects: [
     {
+      /* Logs in once and saves storage state to `authFile`, ahead of every other project */
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+
+    {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], storageState: authFile },
+      dependencies: ['setup'],
     },
 
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: { ...devices['Desktop Firefox'], storageState: authFile },
+      dependencies: ['setup'],
     },
 
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: { ...devices['Desktop Safari'], storageState: authFile },
+      dependencies: ['setup'],
     },
 
     /* Test against mobile viewports. */

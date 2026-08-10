@@ -6,6 +6,10 @@ import { LoginPage } from '../../pages/LoginPage';
 import { InventoryPage } from '../../pages/InventoryPage';
 
 test.describe('Login', () => {
+  // These tests exercise the login form itself, so they must start unauthenticated
+  // rather than reusing the storageState from tests/auth.setup.ts.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test('Valid login with standard_user succeeds and lands on Products page', async ({ page }) => {
     const login = new LoginPage(page);
     const inventory = new InventoryPage(page);

@@ -2,21 +2,18 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { LoginPage } from '../../pages/LoginPage';
 import { InventoryPage } from '../../pages/InventoryPage';
 import { CartPage } from '../../pages/CartPage';
 import { CheckoutPage } from '../../pages/CheckoutPage';
 
 test.describe('Checkout', () => {
   test('Checkout information step validates required fields', async ({ page }) => {
-    const login = new LoginPage(page);
     const inventory = new InventoryPage(page);
     const cart = new CartPage(page);
     const checkout = new CheckoutPage(page);
 
-    // 1. Start from a fresh browser state, log in, add an item, open the cart, and click 'Checkout'
-    await login.goto();
-    await login.login('standard_user', 'secret_sauce');
+    // 1. Start already authenticated (see tests/auth.setup.ts), add an item, open the cart, and click 'Checkout'
+    await page.goto('/inventory.html');
     await inventory.addToCart('sauce-labs-backpack');
     await inventory.header.openCart();
     await cart.checkout();
