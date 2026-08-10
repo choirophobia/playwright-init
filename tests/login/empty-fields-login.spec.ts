@@ -5,6 +5,10 @@ import { test, expect } from '@playwright/test';
 import { LoginPage } from '../../pages/LoginPage';
 
 test.describe('Login', () => {
+  // These tests exercise the login form itself, so they must start unauthenticated
+  // rather than reusing the storageState from tests/auth.setup.ts.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test('Login fails when required fields are left blank', async ({ page }) => {
     const login = new LoginPage(page);
 

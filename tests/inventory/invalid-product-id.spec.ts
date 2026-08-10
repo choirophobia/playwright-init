@@ -2,18 +2,13 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { LoginPage } from '../../pages/LoginPage';
 import { InventoryPage } from '../../pages/InventoryPage';
 
 test.describe('Inventory Browsing', () => {
   test('Navigating to a non-existent product id shows an unguarded "ITEM NOT FOUND" detail page', async ({ page }) => {
-    const login = new LoginPage(page);
     const inventory = new InventoryPage(page);
 
-    // 1. Start from a fresh browser state, navigate, and log in
-    await login.goto();
-    await login.login('standard_user', 'secret_sauce');
-
+    // 1. Start already authenticated (see tests/auth.setup.ts)
     // 2. Navigate directly to a product detail URL with an id that does not correspond to any real product
     await page.goto('/inventory-item.html?id=999');
 

@@ -2,17 +2,14 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { LoginPage } from '../../pages/LoginPage';
 import { InventoryPage } from '../../pages/InventoryPage';
 
 test.describe('Inventory Browsing', () => {
   test('Product detail page reflects and toggles cart state added from the grid', async ({ page }) => {
-    const login = new LoginPage(page);
     const inventory = new InventoryPage(page);
 
-    // 1. Start from a fresh browser state, navigate, and log in
-    await login.goto();
-    await login.login('standard_user', 'secret_sauce');
+    // 1. Start already authenticated (see tests/auth.setup.ts) and go to the Products page
+    await page.goto('/inventory.html');
 
     // 2. Add 'Sauce Labs Backpack' to the cart from the Products grid
     await inventory.addToCart('sauce-labs-backpack');

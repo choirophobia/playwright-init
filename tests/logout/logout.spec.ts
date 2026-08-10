@@ -10,9 +10,8 @@ test.describe('Logout', () => {
     const login = new LoginPage(page);
     const inventory = new InventoryPage(page);
 
-    // 1. Start from a fresh browser state, navigate, and log in
-    await login.goto();
-    await login.login('standard_user', 'secret_sauce');
+    // 1. Start already authenticated (see tests/auth.setup.ts) and go to the Products page
+    await page.goto('/inventory.html');
 
     // expect: User lands on the Products page
     await expect(inventory.header.title).toBeVisible();

@@ -2,19 +2,16 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { LoginPage } from '../../pages/LoginPage';
 import { InventoryPage } from '../../pages/InventoryPage';
 import { CartPage } from '../../pages/CartPage';
 
 test.describe('Inventory Browsing', () => {
   test('Reset App State clears the cart but leaves a stale Remove button on the grid (UI desync gap)', async ({ page }) => {
-    const login = new LoginPage(page);
     const inventory = new InventoryPage(page);
     const cart = new CartPage(page);
 
-    // 1. Start from a fresh browser state, navigate, and log in
-    await login.goto();
-    await login.login('standard_user', 'secret_sauce');
+    // 1. Start already authenticated (see tests/auth.setup.ts) and go to the Products page
+    await page.goto('/inventory.html');
 
     // 2. Add 'Sauce Labs Bike Light' to the cart
     await inventory.addToCart('sauce-labs-bike-light');
