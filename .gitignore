@@ -6,5 +6,6 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/.features-gen/
 /.playwright-mcp/
 .claude/settings.local.json

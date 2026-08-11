@@ -10,6 +10,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 - [Running Tests](#running-tests)
 - [Architecture](#architecture)
 - [Authentication (Storage State)](#authentication-storage-state)
+- [BDD Tests (Cucumber)](#bdd-tests-cucumber)
 - [Test Coverage](#test-coverage)
 - [Continuous Integration](#continuous-integration)
 - [AI-Assisted Workflow](#ai-assisted-workflow)
@@ -20,6 +21,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 |---|---|
 | [`@playwright/test`](https://playwright.dev/) | Test runner, assertions, browser automation |
 | TypeScript | Static typing for tests and page objects |
+| [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) | Generates native Playwright tests from Gherkin `.feature` files |
 | Chromium / Firefox / WebKit | Cross-browser test projects |
 | GitHub Actions | CI — runs the suite on push, PR, and a daily schedule |
 | Discord Webhook | CI pass/fail notifications |
@@ -42,9 +44,13 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   ├── checkout/           # Authenticated via saved storage state
 │   ├── logout/             # Authenticated via saved storage state
 │   └── seed.spec.ts        # Blank seed test used by the AI test generator
+├── features/                # Gherkin BDD scenarios (playwright-bdd)
+│   ├── login.feature       # Same login coverage as tests/login/, in BDD form
+│   └── steps/
+│       └── login.steps.ts  # Step definitions, reusing pages/ page objects
 ├── specs/                  # Human-readable test plans (Markdown)
 │   └── basic-operations.md
-├── playwright.config.ts    # Base URL, browsers, reporter, trace settings
+├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
 ├── .github/workflows/      # CI pipeline
 └── .mcp.json               # Playwright MCP server config
 ```
@@ -64,7 +70,7 @@ npx playwright install
 ## Running Tests
 
 ```bash
-# Run the full suite headless (all browsers)
+# Run the full suite headless (all browsers, incl. BDD scenarios)
 npm test
 
 # Run in interactive UI mode (recommended for local development)
@@ -76,12 +82,20 @@ npx playwright test tests/cart
 # Run against a single browser project
 npx playwright test --project=chromium
 
+# Run only the BDD/Gherkin scenarios
+npx playwright test --project=bdd-chromium
+
+# Regenerate Playwright tests from .feature files without running them
+npm run bddgen
+
 # Debug a specific test
 npx playwright test tests/login/valid-login.spec.ts --debug
 
 # View the last HTML report
 npx playwright show-report
 ```
+
+> `npm test` and `npm run test:ui` run `bddgen` first automatically. If you edit a `.feature` file or a step definition and use `npx playwright test` directly, run `npm run bddgen` beforehand or your changes won't be picked up.
 
 ## Architecture
 
@@ -184,6 +198,31 @@ Playwright's [`storageState`](https://playwright.dev/docs/auth) feature solves t
 
 Because `dependencies: ['setup']` is a **project-level** dependency, the login step runs once before *any* test in that project runs — including the unauthenticated `login/` specs, which don't actually need it. That's a minor, one-time cost (a few hundred ms), not a per-test cost. The bigger trade-off is coverage-shape: since most specs no longer exercise the login form, a login-page regression that doesn't break the underlying session cookie won't be caught by them — that's exactly what the dedicated `login/` specs exist to catch.
 
+## BDD Tests (Cucumber)
+
+Alongside the plain `tests/*.spec.ts` suite, this project also runs a parallel BDD/Gherkin suite via [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/), currently covering the same three login scenarios as `tests/login/`. It's a starting point — more `.feature` files can be added the same way as coverage grows.
+
+### Why playwright-bdd instead of plain Cucumber.js
+
+Playwright already has a first-class test runner with parallelism, tracing, retries, an HTML reporter, and (in this repo) the `storageState`-based auth setup described above. Running Cucumber via its own standalone runner (`@cucumber/cucumber` / `cucumber-js`) would mean a second, separate test runner with none of that — you'd have to hand-roll browser launch/teardown and manually reload the storage state file yourself.
+
+`playwright-bdd` instead **compiles Gherkin `.feature` files into real Playwright test files** ahead of time. Those generated tests then run through `npx playwright test` like any other spec, so every existing project (tracing, HTML reporter, cross-browser projects, and — for scenarios that need it — the `setup`/`storageState` auth flow) keeps working unchanged.
+
+### How it's wired up
+
+1. **`features/login.feature`** — the same three login scenarios as `tests/login/*.spec.ts`, written as Gherkin `Given/When/Then` steps, sharing a `Background` for the common "start on the login page" step.
+2. **`features/steps/login.steps.ts`** — step definitions using `createBdd()` from `playwright-bdd`. Each step gets Playwright's `page` fixture directly and reuses the same `LoginPage`/`InventoryPage` page objects as the rest of the suite — no separate automation layer.
+3. **`playwright.config.ts`** — `defineBddConfig({ features: 'features/**/*.feature', steps: 'features/steps/**/*.ts' })` returns a generated `testDir` (`.features-gen/`, gitignored — it's a build artifact, regenerated on every run, same idea as `playwright/.auth/`). Three new projects (`bdd-chromium`, `bdd-firefox`, `bdd-webkit`) point their `testDir` at it.
+4. **`package.json`** — `npm run bddgen` runs the `bddgen` CLI to (re)generate the Playwright test files from the `.feature`/step files; `npm test` and `npm run test:ui` run it automatically before `playwright test`.
+
+Because the login feature tests the login form itself, the `bdd-*` projects deliberately have **no** `dependencies: ['setup']` and **no** `storageState` — same reasoning as `tests/login/*.spec.ts` in the [Authentication](#authentication-storage-state) section above. A future authenticated `.feature` file (e.g. checkout) could add its own `bdd-authenticated-*` project that does depend on `setup` and sets `storageState: authFile`, exactly like the existing `chromium`/`firefox`/`webkit` projects do.
+
+### Steps to add a new feature file
+
+1. Write the scenario in a new `features/<name>.feature` file using `Given/When/Then`.
+2. Add matching step definitions in `features/steps/<name>.steps.ts` (or reuse existing steps where the wording matches).
+3. Run `npm run bddgen` to regenerate `.features-gen/`, then `npx playwright test --project=bdd-chromium` to run just that scenario while iterating.
+
 ## Test Coverage
 
 Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md) and implemented as specs under `tests/`, using the `standard_user` account. Locked-out, problem, and other special demo accounts are out of scope.
@@ -195,6 +234,7 @@ Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md
 | **Cart** | `tests/cart/` (4) | Adding single/multiple items, removing items, viewing cart |
 | **Checkout** | `tests/checkout/` (5) | Completing orders (single/multiple items), required-field validation, cancelling checkout, whitespace-only field validation gap |
 | **Logout** | `tests/logout/` (2) | Logging out, logging out with items still in cart |
+| **Login (BDD)** | `features/login.feature` (3 scenarios) | Same login coverage as `tests/login/`, expressed as Gherkin — see [BDD Tests](#bdd-tests-cucumber) |
 
 ## Continuous Integration
 
@@ -204,7 +244,7 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 - A daily schedule (06:00 WIB / 23:00 UTC)
 - Manual dispatch
 
-Each run installs dependencies and browsers, executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
+Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
 
 ## AI-Assisted Workflow
 

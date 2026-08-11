@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { defineBddConfig } from 'playwright-bdd';
 
 /**
  * Read environment variables from file.
@@ -10,6 +11,16 @@ import { defineConfig, devices } from '@playwright/test';
 
 /** Path where the logged-in storage state (cookies/localStorage) is cached by tests/auth.setup.ts */
 const authFile = 'playwright/.auth/standard_user.json';
+
+/**
+ * playwright-bdd: generates real Playwright test files from Gherkin .feature files.
+ * Run `npx bddgen` (or `npm test`, which runs it first) to (re)generate them before `playwright test` runs.
+ * See https://vitalets.github.io/playwright-bdd/
+ */
+const bddTestDir = defineBddConfig({
+  features: 'features/**/*.feature',
+  steps: 'features/steps/**/*.ts',
+});
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -59,6 +70,30 @@ export default defineConfig({
       name: 'webkit',
       use: { ...devices['Desktop Safari'], storageState: authFile },
       dependencies: ['setup'],
+    },
+
+    /*
+     * BDD projects: run Gherkin scenarios from features/*.feature (generated into
+     * bddTestDir by playwright-bdd). No `dependencies`/`storageState` here on purpose —
+     * the login feature tests the login form itself, so it must start unauthenticated,
+     * same as tests/login/*.spec.ts.
+     */
+    {
+      name: 'bdd-chromium',
+      testDir: bddTestDir,
+      use: { ...devices['Desktop Chrome'] },
+    },
+
+    {
+      name: 'bdd-firefox',
+      testDir: bddTestDir,
+      use: { ...devices['Desktop Firefox'] },
+    },
+
+    {
+      name: 'bdd-webkit',
+      testDir: bddTestDir,
+      use: { ...devices['Desktop Safari'] },
     },
 
     /* Test against mobile viewports. */
