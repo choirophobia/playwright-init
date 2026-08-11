@@ -46,8 +46,10 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   └── seed.spec.ts        # Blank seed test used by the AI test generator
 ├── features/                # Gherkin BDD scenarios (playwright-bdd)
 │   ├── login.feature       # Same login coverage as tests/login/, in BDD form
+│   ├── cart.feature        # Same cart coverage as tests/cart/, tagged @auth
 │   └── steps/
-│       └── login.steps.ts  # Step definitions, reusing pages/ page objects
+│       ├── login.steps.ts  # Login step definitions, reusing pages/ page objects
+│       └── cart.steps.ts   # Cart step definitions, reusing pages/ page objects
 ├── specs/                  # Human-readable test plans (Markdown)
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
@@ -82,8 +84,11 @@ npx playwright test tests/cart
 # Run against a single browser project
 npx playwright test --project=chromium
 
-# Run only the BDD/Gherkin scenarios
+# Run only the BDD/Gherkin scenarios (unauthenticated, e.g. login)
 npx playwright test --project=bdd-chromium
+
+# Run only the @auth-tagged BDD/Gherkin scenarios (e.g. cart)
+npx playwright test --project=bdd-chromium-auth
 
 # Regenerate Playwright tests from .feature files without running them
 npm run bddgen
@@ -128,7 +133,7 @@ Key settings in `playwright.config.ts`:
 - **Reporter:** HTML (`playwright-report/`)
 - **Tracing:** captured on first retry
 - **CI behavior:** `test.only` is forbidden, tests retry twice, and run with a single worker
-- **Projects:** a `setup` project runs `tests/auth.setup.ts` once, and the `chromium`/`firefox`/`webkit` projects each depend on it and reuse its saved session (see below)
+- **Projects:** a `setup` project runs `tests/auth.setup.ts` once, and the `chromium`/`firefox`/`webkit`/`bdd-*-auth` projects each depend on it and reuse its saved session (see below)
 
 ## Authentication (Storage State)
 
@@ -200,7 +205,7 @@ Because `dependencies: ['setup']` is a **project-level** dependency, the login s
 
 ## BDD Tests (Cucumber)
 
-Alongside the plain `tests/*.spec.ts` suite, this project also runs a parallel BDD/Gherkin suite via [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/), currently covering the same three login scenarios as `tests/login/`. It's a starting point — more `.feature` files can be added the same way as coverage grows.
+Alongside the plain `tests/*.spec.ts` suite, this project also runs a parallel BDD/Gherkin suite via [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/), currently covering the same login scenarios as `tests/login/` and the same cart scenarios as `tests/cart/`. It's a growing suite — more `.feature` files can be added the same way as coverage expands.
 
 ### Why playwright-bdd instead of plain Cucumber.js
 
@@ -210,18 +215,23 @@ Playwright already has a first-class test runner with parallelism, tracing, retr
 
 ### How it's wired up
 
-1. **`features/login.feature`** — the same three login scenarios as `tests/login/*.spec.ts`, written as Gherkin `Given/When/Then` steps, sharing a `Background` for the common "start on the login page" step.
-2. **`features/steps/login.steps.ts`** — step definitions using `createBdd()` from `playwright-bdd`. Each step gets Playwright's `page` fixture directly and reuses the same `LoginPage`/`InventoryPage` page objects as the rest of the suite — no separate automation layer.
-3. **`playwright.config.ts`** — `defineBddConfig({ features: 'features/**/*.feature', steps: 'features/steps/**/*.ts' })` returns a generated `testDir` (`.features-gen/`, gitignored — it's a build artifact, regenerated on every run, same idea as `playwright/.auth/`). Three new projects (`bdd-chromium`, `bdd-firefox`, `bdd-webkit`) point their `testDir` at it.
-4. **`package.json`** — `npm run bddgen` runs the `bddgen` CLI to (re)generate the Playwright test files from the `.feature`/step files; `npm test` and `npm run test:ui` run it automatically before `playwright test`.
+1. **`features/login.feature`** — the same three login scenarios as `tests/login/*.spec.ts`, written as Gherkin `Given/When/Then` steps, sharing a `Background` for the common "start on the login page" step. Untagged, since it must run unauthenticated.
+2. **`features/cart.feature`** — the same four cart scenarios as `tests/cart/*.spec.ts` (add a single item, add multiple items, remove the only item, view/remove from the Cart page), sharing a `Background` for the common "start on the Products page" step. Tagged `@auth` at the `Feature` level, since every scenario needs a logged-in session.
+3. **`features/steps/login.steps.ts`** / **`features/steps/cart.steps.ts`** — step definitions using `createBdd()` from `playwright-bdd`, one file per feature. Each step gets Playwright's `page` fixture directly and reuses the same `LoginPage`/`InventoryPage`/`CartPage` page objects as the rest of the suite — no separate automation layer. A step's wording must stay unique across all step files (they're combined into one pool), so shared phrasing like `Then I should land on the Products page` is defined once, in `login.steps.ts`, and reused from `cart.feature`.
+4. **`playwright.config.ts`** — two `defineBddConfig()` calls compile the same `features/**/*.feature` glob into two separate output directories, split by the `@auth` tag:
+   - `defineBddConfig({ tags: 'not @auth', ... })` → `.features-gen/`, for untagged scenarios (login). Backs the `bdd-chromium`/`bdd-firefox`/`bdd-webkit` projects, which — like `tests/login/*.spec.ts` — have **no** `dependencies: ['setup']` and **no** `storageState`.
+   - `defineBddConfig({ tags: '@auth', outputDir: '.features-gen-auth', ... })` → `.features-gen-auth/`, for `@auth`-tagged scenarios (cart). Backs the `bdd-chromium-auth`/`bdd-firefox-auth`/`bdd-webkit-auth` projects, which **do** declare `dependencies: ['setup']` and `storageState: authFile`, exactly like the plain `chromium`/`firefox`/`webkit` projects.
 
-Because the login feature tests the login form itself, the `bdd-*` projects deliberately have **no** `dependencies: ['setup']` and **no** `storageState` — same reasoning as `tests/login/*.spec.ts` in the [Authentication](#authentication-storage-state) section above. A future authenticated `.feature` file (e.g. checkout) could add its own `bdd-authenticated-*` project that does depend on `setup` and sets `storageState: authFile`, exactly like the existing `chromium`/`firefox`/`webkit` projects do.
+   Both output directories are gitignored build artifacts, regenerated on every run — same idea as `playwright/.auth/`.
+5. **`package.json`** — `npm run bddgen` runs the `bddgen` CLI to (re)generate the Playwright test files from the `.feature`/step files; `npm test` and `npm run test:ui` run it automatically before `playwright test`.
 
 ### Steps to add a new feature file
 
-1. Write the scenario in a new `features/<name>.feature` file using `Given/When/Then`.
-2. Add matching step definitions in `features/steps/<name>.steps.ts` (or reuse existing steps where the wording matches).
-3. Run `npm run bddgen` to regenerate `.features-gen/`, then `npx playwright test --project=bdd-chromium` to run just that scenario while iterating.
+1. Write the scenario in a new `features/<name>.feature` file using `Given/When/Then`. If every scenario in the file needs a logged-in session, tag the `Feature:` line with `@auth`; otherwise leave it untagged.
+2. Add matching step definitions in `features/steps/<name>.steps.ts` (or reuse existing steps where the wording matches exactly — duplicate step text across files will fail generation).
+3. Run `npm run bddgen` to regenerate `.features-gen/`/`.features-gen-auth/`, then run just that scenario while iterating:
+   - Untagged: `npx playwright test --project=bdd-chromium`
+   - `@auth`-tagged: `npx playwright test --project=bdd-chromium-auth`
 
 ## Test Coverage
 
@@ -235,6 +245,7 @@ Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md
 | **Checkout** | `tests/checkout/` (5) | Completing orders (single/multiple items), required-field validation, cancelling checkout, whitespace-only field validation gap |
 | **Logout** | `tests/logout/` (2) | Logging out, logging out with items still in cart |
 | **Login (BDD)** | `features/login.feature` (3 scenarios) | Same login coverage as `tests/login/`, expressed as Gherkin — see [BDD Tests](#bdd-tests-cucumber) |
+| **Cart (BDD)** | `features/cart.feature` (4 scenarios) | Same cart coverage as `tests/cart/`, expressed as Gherkin and tagged `@auth` — see [BDD Tests](#bdd-tests-cucumber) |
 
 ## Continuous Integration
 

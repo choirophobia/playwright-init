@@ -7,5 +7,6 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 /.features-gen/
+/.features-gen-auth/
 /.playwright-mcp/
 .claude/settings.local.json
