@@ -16,10 +16,23 @@ const authFile = 'playwright/.auth/standard_user.json';
  * playwright-bdd: generates real Playwright test files from Gherkin .feature files.
  * Run `npx bddgen` (or `npm test`, which runs it first) to (re)generate them before `playwright test` runs.
  * See https://vitalets.github.io/playwright-bdd/
+ *
+ * Two configs split scenarios by the `@auth` tag on the Feature line: unauthenticated
+ * scenarios (e.g. login) run without storage state, while `@auth`-tagged scenarios
+ * (e.g. cart) run against the `bdd-*-auth` projects below, which depend on `setup`
+ * and load the saved session, same as the plain `chromium`/`firefox`/`webkit` projects.
  */
 const bddTestDir = defineBddConfig({
   features: 'features/**/*.feature',
   steps: 'features/steps/**/*.ts',
+  tags: 'not @auth',
+});
+
+const bddAuthTestDir = defineBddConfig({
+  outputDir: '.features-gen-auth',
+  features: 'features/**/*.feature',
+  steps: 'features/steps/**/*.ts',
+  tags: '@auth',
 });
 
 /**
@@ -94,6 +107,31 @@ export default defineConfig({
       name: 'bdd-webkit',
       testDir: bddTestDir,
       use: { ...devices['Desktop Safari'] },
+    },
+
+    /*
+     * BDD projects for `@auth`-tagged scenarios (e.g. features/cart.feature): depend on
+     * `setup` and reuse the saved session, same as the plain chromium/firefox/webkit projects.
+     */
+    {
+      name: 'bdd-chromium-auth',
+      testDir: bddAuthTestDir,
+      use: { ...devices['Desktop Chrome'], storageState: authFile },
+      dependencies: ['setup'],
+    },
+
+    {
+      name: 'bdd-firefox-auth',
+      testDir: bddAuthTestDir,
+      use: { ...devices['Desktop Firefox'], storageState: authFile },
+      dependencies: ['setup'],
+    },
+
+    {
+      name: 'bdd-webkit-auth',
+      testDir: bddAuthTestDir,
+      use: { ...devices['Desktop Safari'], storageState: authFile },
+      dependencies: ['setup'],
     },
 
     /* Test against mobile viewports. */
