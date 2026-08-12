@@ -1,9 +1,8 @@
 import { expect } from '@playwright/test';
 import { createBdd } from 'playwright-bdd';
-import { CartPage } from '../../pages/CartPage';
-import { CheckoutPage } from '../../pages/CheckoutPage';
+import { test } from './fixtures';
 
-const { When, Then } = createBdd();
+const { When, Then } = createBdd(test);
 
 const stepUrls: Record<string, RegExp> = {
   'Checkout: Your Information': /\/checkout-step-one\.html$/,
@@ -11,69 +10,57 @@ const stepUrls: Record<string, RegExp> = {
   'Checkout: Complete!': /\/checkout-complete\.html$/,
 };
 
-When('I click Checkout', async ({ page }) => {
-  const cart = new CartPage(page);
+When('I click Checkout', async ({ cart }) => {
   await cart.checkout();
 });
 
-Then('I should be on the {string} step', async ({ page }, title: string) => {
-  const checkout = new CheckoutPage(page);
+Then('I should be on the {string} step', async ({ page, checkout }, title: string) => {
   await expect(page).toHaveURL(stepUrls[title]);
   await expect(checkout.header.title).toHaveText(title);
 });
 
 When(
   'I fill in checkout info with first name {string}, last name {string}, and postal code {string}',
-  async ({ page }, firstName: string, lastName: string, postalCode: string) => {
-    const checkout = new CheckoutPage(page);
+  async ({ checkout }, firstName: string, lastName: string, postalCode: string) => {
     await checkout.fillInfo(firstName, lastName, postalCode);
   },
 );
 
-When('I fill in the first name field with {string}', async ({ page }, value: string) => {
-  const checkout = new CheckoutPage(page);
+When('I fill in the first name field with {string}', async ({ checkout }, value: string) => {
   await checkout.firstNameField.fill(value);
 });
 
-When('I fill in the last name field with {string}', async ({ page }, value: string) => {
-  const checkout = new CheckoutPage(page);
+When('I fill in the last name field with {string}', async ({ checkout }, value: string) => {
   await checkout.lastNameField.fill(value);
 });
 
-When('I fill in the postal code field with {string}', async ({ page }, value: string) => {
-  const checkout = new CheckoutPage(page);
+When('I fill in the postal code field with {string}', async ({ checkout }, value: string) => {
   await checkout.postalCodeField.fill(value);
 });
 
-When('I continue to the overview step', async ({ page }) => {
-  const checkout = new CheckoutPage(page);
+When('I continue to the overview step', async ({ checkout }) => {
   await checkout.continueToOverview();
 });
 
-When('I cancel checkout', async ({ page }) => {
-  const checkout = new CheckoutPage(page);
+When('I cancel checkout', async ({ checkout }) => {
   await checkout.cancel();
 });
 
-When('I finish the order', async ({ page }) => {
-  const checkout = new CheckoutPage(page);
+When('I finish the order', async ({ checkout }) => {
   await checkout.finish();
 });
 
-When('I click Back Home', async ({ page }) => {
-  const checkout = new CheckoutPage(page);
+When('I click Back Home', async ({ checkout }) => {
   await checkout.backHomeButton.click();
 });
 
-Then('the checkout overview should list {int} item(s)', async ({ page }, count: number) => {
-  const checkout = new CheckoutPage(page);
+Then('the checkout overview should list {int} item(s)', async ({ checkout }, count: number) => {
   await expect(checkout.items).toHaveCount(count);
 });
 
 Then(
   'the checkout overview should show item {string} with quantity {string} and price {string}',
-  async ({ page }, name: string, quantity: string, price: string) => {
-    const checkout = new CheckoutPage(page);
+  async ({ checkout }, name: string, quantity: string, price: string) => {
     const row = checkout.itemRow(name);
     await expect(checkout.itemQuantity(row)).toHaveText(quantity);
     await expect(checkout.itemName(row)).toHaveText(name);
@@ -81,33 +68,27 @@ Then(
   },
 );
 
-Then('the payment info should show {string}', async ({ page }, value: string) => {
-  const checkout = new CheckoutPage(page);
+Then('the payment info should show {string}', async ({ checkout }, value: string) => {
   await expect(checkout.paymentInfoValue).toHaveText(value);
 });
 
-Then('the shipping info should show {string}', async ({ page }, value: string) => {
-  const checkout = new CheckoutPage(page);
+Then('the shipping info should show {string}', async ({ checkout }, value: string) => {
   await expect(checkout.shippingInfoValue).toHaveText(value);
 });
 
-Then('the item total should show {string}', async ({ page }, value: string) => {
-  const checkout = new CheckoutPage(page);
+Then('the item total should show {string}', async ({ checkout }, value: string) => {
   await expect(checkout.subtotalLabel).toHaveText(value);
 });
 
-Then('the tax should show {string}', async ({ page }, value: string) => {
-  const checkout = new CheckoutPage(page);
+Then('the tax should show {string}', async ({ checkout }, value: string) => {
   await expect(checkout.taxLabel).toHaveText(value);
 });
 
-Then('the order total should show {string}', async ({ page }, value: string) => {
-  const checkout = new CheckoutPage(page);
+Then('the order total should show {string}', async ({ checkout }, value: string) => {
   await expect(checkout.totalLabel).toHaveText(value);
 });
 
-Then('the order confirmation text should be visible', async ({ page }) => {
-  const checkout = new CheckoutPage(page);
+Then('the order confirmation text should be visible', async ({ checkout }) => {
   await expect(checkout.ponyExpressImage).toBeVisible();
   await expect(checkout.completeHeader).toHaveText('Thank you for your order!');
   await expect(checkout.completeText).toHaveText(
@@ -115,17 +96,14 @@ Then('the order confirmation text should be visible', async ({ page }) => {
   );
 });
 
-Then('the checkout error message should say {string}', async ({ page }, message: string) => {
-  const checkout = new CheckoutPage(page);
+Then('the checkout error message should say {string}', async ({ checkout }, message: string) => {
   await expect(checkout.errorMessage).toHaveText(message);
 });
 
-Then('no checkout error message should be displayed', async ({ page }) => {
-  const checkout = new CheckoutPage(page);
+Then('no checkout error message should be displayed', async ({ checkout }) => {
   await expect(checkout.errorMessage).toBeHidden();
 });
 
-Then('the first name field should be marked as invalid', async ({ page }) => {
-  const checkout = new CheckoutPage(page);
+Then('the first name field should be marked as invalid', async ({ checkout }) => {
   await expect(checkout.firstNameField).toHaveClass(/error/);
 });

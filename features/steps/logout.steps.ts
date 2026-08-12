@@ -1,10 +1,9 @@
 import { expect, type Locator } from '@playwright/test';
 import { createBdd } from 'playwright-bdd';
-import { LoginPage } from '../../pages/LoginPage';
-import { InventoryPage } from '../../pages/InventoryPage';
+import { test } from './fixtures';
 import { HeaderComponent } from '../../pages/HeaderComponent';
 
-const { When, Then } = createBdd();
+const { When, Then } = createBdd(test);
 
 function menuLocator(header: HeaderComponent, label: string): Locator {
   switch (label) {
@@ -23,23 +22,19 @@ function menuLocator(header: HeaderComponent, label: string): Locator {
   }
 }
 
-When('I open the menu', async ({ page }) => {
-  const inventory = new InventoryPage(page);
+When('I open the menu', async ({ inventory }) => {
   await inventory.header.openMenu();
 });
 
-Then('the menu should show {string}', async ({ page }, label: string) => {
-  const inventory = new InventoryPage(page);
+Then('the menu should show {string}', async ({ inventory }, label: string) => {
   await expect(menuLocator(inventory.header, label)).toBeVisible();
 });
 
-When('I click Logout', async ({ page }) => {
-  const inventory = new InventoryPage(page);
+When('I click Logout', async ({ inventory }) => {
   await inventory.header.logoutLink.click();
 });
 
-When('I logout', async ({ page }) => {
-  const inventory = new InventoryPage(page);
+When('I logout', async ({ inventory }) => {
   await inventory.header.logout();
 });
 
@@ -51,13 +46,11 @@ Then('I should be redirected to the login page', async ({ page }) => {
   await expect(page).toHaveURL('https://www.saucedemo.com/');
 });
 
-Then('the username and password fields should be empty', async ({ page }) => {
-  const login = new LoginPage(page);
+Then('the username and password fields should be empty', async ({ login }) => {
   await expect(login.usernameInput).toHaveValue('');
   await expect(login.passwordInput).toHaveValue('');
 });
 
-Then('the login button should be visible', async ({ page }) => {
-  const login = new LoginPage(page);
+Then('the login button should be visible', async ({ login }) => {
   await expect(login.loginButton).toBeVisible();
 });
