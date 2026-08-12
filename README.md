@@ -308,6 +308,24 @@ Then('the cart badge should show {string}', async ({ inventory }, count: string)
 
 The trade-off: fixtures add one extra file and one extra concept (a fixture vs. a plain object) to learn, and `fixtures.ts` must live inside the `steps` glob in `playwright.config.ts` (`features/steps/**/*.ts`) so `bddgen` can detect the exported `test` — placing it elsewhere requires the `importTestFrom` option instead. For a suite with a handful of page objects reused across many steps, the savings in boilerplate are worth that one-time setup cost.
 
+### Scenario Outlines
+
+A `Scenario Outline` is a Gherkin template scenario paired with an `Examples:` table. `bddgen` expands it at generation time into one independent, concrete test **per row** — it substitutes each row's values into the `<placeholder>` tokens in the outline's steps before matching them against step definitions, so no special step-definition code is needed. This is different from writing a loop inside one step: an outline with 3 rows produces **3 separate tests**, each with its own pass/fail, browser context, and entry in the HTML report — not one test that iterates 3 cases internally.
+
+**Why use it:** the alternative is copy-pasting the same `When`/`Then` step block once per case with different literal strings, which is what this suite's required-field and menu-link scenarios used to do. An outline collapses that into one step block plus one table row per case, and keeps each case isolated — if one row's assertion starts failing, the report tells you exactly which one, instead of hiding it inside a longer scenario where an earlier step's failure masks whether later steps still work.
+
+**When *not* to use it:** only when the *same steps* genuinely repeat with *different data*. It's the wrong tool for a scenario where each step depends on state built up by the previous step (e.g. `tests/checkout/complete-order-single-item.spec.ts`'s BDD counterpart walks through add → checkout → fill info → finish → back home as one connected flow — there's no "different data, same steps" repetition to factor out). Forcing a sequential, stateful flow into an outline just to use the feature produces an awkward table with columns that don't cleanly vary per row.
+
+This suite converted three scenarios that fit the pattern, and deliberately left the rest alone:
+
+| Feature | Before | After |
+|---|---|---|
+| `login.feature` | One scenario walking through "submit blank → check error → fill username → submit → check error" as two dependent steps | `Scenario Outline` with 2 rows (`username`, `password`, `error`), reusing the existing `When I log in with username {string} and password {string}` step — filling a field with `""` is equivalent to leaving it blank |
+| `checkout.feature` | One scenario filling First Name → checking error → filling Last Name → checking error → filling Postal Code → checking error, in sequence | `Scenario Outline` with 3 rows (`firstName`, `lastName`, `postalCode`, `error`), reusing `I fill in checkout info with first name {string}, last name {string}, and postal code {string}`. The one assertion that didn't fit the table (the invalid-field CSS highlight) was kept as its own small `Scenario` so no coverage was lost |
+| `logout.feature` | One scenario asserting all 5 side-menu links are visible, then continuing into the actual logout flow in the same scenario | `Scenario Outline` with 5 rows (one per `label`) for the link-visibility check, split from a separate `Scenario` for the logout flow itself |
+
+Each outline's `Examples:` block is also named with a placeholder — e.g. `Examples: <error>` in `checkout.feature` — which `bddgen` picks up as a per-row title template. Without it, generated tests are titled generically (`Example #1`, `Example #2`, …); with it, the HTML report shows the actual row data (`Error: First Name is required`, `Error: Last Name is required`, …), which is much easier to scan when a specific row fails.
+
 ### Steps to add a new feature file
 
 1. Write the scenario in a new `features/<name>.feature` file using `Given/When/Then`. If every scenario in the file needs a logged-in session, tag the `Feature:` line with `@auth`; otherwise leave it untagged.
@@ -327,10 +345,10 @@ Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md
 | **Cart** | `tests/cart/` (4) | Adding single/multiple items, removing items, viewing cart |
 | **Checkout** | `tests/checkout/` (5) | Completing orders (single/multiple items), required-field validation, cancelling checkout, whitespace-only field validation gap |
 | **Logout** | `tests/logout/` (2) | Logging out, logging out with items still in cart |
-| **Login (BDD)** | `features/login.feature` (3 scenarios) | Same login coverage as `tests/login/`, expressed as Gherkin — see [BDD Tests](#bdd-tests-cucumber) |
+| **Login (BDD)** | `features/login.feature` (3 scenario definitions → 4 generated tests) | Same login coverage as `tests/login/`, expressed as Gherkin; the blank-required-field case is a Scenario Outline — see [BDD Tests](#bdd-tests-cucumber) |
 | **Cart (BDD)** | `features/cart.feature` (4 scenarios) | Same cart coverage as `tests/cart/`, expressed as Gherkin and tagged `@auth` — see [BDD Tests](#bdd-tests-cucumber) |
-| **Checkout (BDD)** | `features/checkout.feature` (5 scenarios) | Same checkout coverage as `tests/checkout/`, expressed as Gherkin and tagged `@auth` — see [BDD Tests](#bdd-tests-cucumber) |
-| **Logout (BDD)** | `features/logout.feature` (2 scenarios) | Same logout coverage as `tests/logout/`, expressed as Gherkin and tagged `@auth` — see [BDD Tests](#bdd-tests-cucumber) |
+| **Checkout (BDD)** | `features/checkout.feature` (6 scenario definitions → 8 generated tests) | Same checkout coverage as `tests/checkout/`, expressed as Gherkin and tagged `@auth`; required-field validation is a Scenario Outline — see [BDD Tests](#bdd-tests-cucumber) |
+| **Logout (BDD)** | `features/logout.feature` (3 scenario definitions → 7 generated tests) | Same logout coverage as `tests/logout/`, expressed as Gherkin and tagged `@auth`; the side-menu-links check is a Scenario Outline — see [BDD Tests](#bdd-tests-cucumber) |
 | **Inventory (BDD)** | `features/inventory.feature` (6 scenarios) | Same inventory coverage as `tests/inventory/`, expressed as Gherkin and tagged `@auth` — see [BDD Tests](#bdd-tests-cucumber) |
 
 ## Continuous Integration

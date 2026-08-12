@@ -13,15 +13,6 @@ When('I log in with username {string} and password {string}', async ({ login }, 
   await login.login(username, password);
 });
 
-When('I click the login button without entering any credentials', async ({ login }) => {
-  await login.loginButton.click();
-});
-
-When('I enter {string} as the username and click the login button', async ({ login }, username: string) => {
-  await login.usernameInput.fill(username);
-  await login.loginButton.click();
-});
-
 Then('I should land on the Products page', async ({ page, inventory }) => {
   await expect(page).toHaveURL(/inventory\.html/);
   await expect(inventory.header.title).toHaveText('Products');

@@ -52,26 +52,27 @@ Feature: Checkout
     Then I should be on the "Checkout: Complete!" step
     And the cart badge should not be displayed
 
-  Scenario: Checkout information step validates required fields
+  Scenario Outline: Checkout information step rejects a missing required field
     When I add "sauce-labs-backpack" to the cart
     And I open the cart
     And I click Checkout
-    Then I should be on the "Checkout: Your Information" step
-    When I continue to the overview step
-    Then the checkout error message should say "Error: First Name is required"
-    And I should be on the "Checkout: Your Information" step
-    And the first name field should be marked as invalid
-    When I fill in the first name field with "Fikri"
+    And I fill in checkout info with first name "<firstName>", last name "<lastName>", and postal code "<postalCode>"
     And I continue to the overview step
-    Then the checkout error message should say "Error: Last Name is required"
+    Then the checkout error message should say "<error>"
     And I should be on the "Checkout: Your Information" step
-    When I fill in the last name field with "Ahmadi"
+
+    Examples: <error>
+      | firstName | lastName | postalCode | error                           |
+      |           | Ahmadi   | 12345      | Error: First Name is required   |
+      | Fikri     |          | 12345      | Error: Last Name is required    |
+      | Fikri     | Ahmadi   |            | Error: Postal Code is required  |
+
+  Scenario: Checkout information step highlights an empty required field
+    When I add "sauce-labs-backpack" to the cart
+    And I open the cart
+    And I click Checkout
     And I continue to the overview step
-    Then the checkout error message should say "Error: Postal Code is required"
-    And I should be on the "Checkout: Your Information" step
-    When I fill in the postal code field with "12345"
-    And I continue to the overview step
-    Then I should be on the "Checkout: Overview" step
+    Then the first name field should be marked as invalid
 
   Scenario: Checkout information step accepts whitespace-only field values (validation gap)
     When I add "sauce-labs-backpack" to the cart

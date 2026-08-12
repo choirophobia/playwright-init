@@ -17,8 +17,11 @@ Feature: Login
     Then I should stay on the login page
     And I should see the error message "Epic sadface: Username and password do not match any user in this service"
 
-  Scenario: Login fails when required fields are left blank
-    When I click the login button without entering any credentials
-    Then I should see the error message "Epic sadface: Username is required"
-    When I enter "standard_user" as the username and click the login button
-    Then I should see the error message "Epic sadface: Password is required"
+  Scenario Outline: Login fails when a required field is left blank
+    When I log in with username "<username>" and password "<password>"
+    Then I should see the error message "<error>"
+
+    Examples: <error>
+      | username      | password | error                               |
+      |               |          | Epic sadface: Username is required |
+      | standard_user |          | Epic sadface: Password is required |
