@@ -51,11 +51,12 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   ├── logout.feature       # Same logout coverage as tests/logout/, tagged @auth
 │   ├── inventory.feature    # Same inventory coverage as tests/inventory/, tagged @auth
 │   └── steps/
-│       ├── login.steps.ts      # Login step definitions, reusing pages/ page objects
-│       ├── cart.steps.ts       # Cart step definitions, reusing pages/ page objects
-│       ├── checkout.steps.ts   # Checkout step definitions, reusing pages/ page objects
-│       ├── logout.steps.ts     # Logout step definitions, reusing pages/ page objects
-│       └── inventory.steps.ts  # Inventory step definitions, reusing pages/ page objects
+│       ├── fixtures.ts         # Custom `test` injecting page objects as fixtures — see below
+│       ├── login.steps.ts      # Login step definitions
+│       ├── cart.steps.ts       # Cart step definitions
+│       ├── checkout.steps.ts   # Checkout step definitions
+│       ├── logout.steps.ts     # Logout step definitions
+│       └── inventory.steps.ts  # Inventory step definitions
 ├── specs/                  # Human-readable test plans (Markdown)
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
@@ -213,6 +214,14 @@ Because `dependencies: ['setup']` is a **project-level** dependency, the login s
 
 Alongside the plain `tests/*.spec.ts` suite, this project also runs a parallel BDD/Gherkin suite via [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/), covering the same scenarios as `tests/login/`, `tests/cart/`, `tests/checkout/`, `tests/logout/`, and `tests/inventory/`. It's a growing suite — more `.feature` files can be added the same way as coverage expands.
 
+### What is BDD?
+
+BDD (Behavior-Driven Development) is a way of writing tests as plain-language scenarios — `Given/When/Then` steps in [Gherkin](https://cucumber.io/docs/gherkin/), the syntax [Cucumber](https://cucumber.io/) popularized — instead of raw test code. A `.feature` file like `features/cart.feature` reads as a spec anyone can follow (`When I add "sauce-labs-backpack" to the cart / Then the cart badge should show "1"`), while a `.steps.ts` file maps each line to the actual Playwright code that runs it.
+
+**Why use it:** it gives non-engineers (PMs, QA, stakeholders) a version of the test suite they can read and review without knowing TypeScript, and it forces scenarios to be described in terms of user-visible behavior rather than implementation details — which tends to produce more resilient tests. The step-reuse system also means a vocabulary of steps (`Given I am on the Products page`, `Then the cart badge should show {string}`) builds up over time, so new scenarios are often just new combinations of existing steps.
+
+**When to reach for it:** it's worth the extra layer (a `.feature` file plus a `.steps.ts` file plus keeping step wording unique — see [Custom Fixtures for Page Objects](#custom-fixtures-for-page-objects) and the notes on duplicate steps below) when a team actually has non-engineers reading or writing scenarios, or when a shared step vocabulary will get reused a lot. For a solo project or a small team that's comfortable reading TypeScript directly, plain `tests/*.spec.ts` files — like the ones this suite already has — are simpler to write and debug, with no translation layer between the Gherkin text and the code that runs it. This repo runs both side by side deliberately, as a comparison.
+
 ### Why playwright-bdd instead of plain Cucumber.js
 
 Playwright already has a first-class test runner with parallelism, tracing, retries, an HTML reporter, and (in this repo) the `storageState`-based auth setup described above. Running Cucumber via its own standalone runner (`@cucumber/cucumber` / `cucumber-js`) would mean a second, separate test runner with none of that — you'd have to hand-roll browser launch/teardown and manually reload the storage state file yourself.
@@ -223,7 +232,7 @@ Playwright already has a first-class test runner with parallelism, tracing, retr
 
 1. **`features/login.feature`** — the same three login scenarios as `tests/login/*.spec.ts`, written as Gherkin `Given/When/Then` steps, sharing a `Background` for the common "start on the login page" step. Untagged, since it must run unauthenticated.
 2. **`features/cart.feature`**, **`features/checkout.feature`**, **`features/logout.feature`**, **`features/inventory.feature`** — the same scenarios as their `tests/*` counterparts, each sharing a `Background` of `Given I am on the Products page`. All tagged `@auth` at the `Feature` level, since every scenario needs a logged-in session.
-3. **`features/steps/*.steps.ts`** — one step-definition file per feature, using `createBdd()` from `playwright-bdd`. Each step gets Playwright's `page` fixture directly and reuses the same `LoginPage`/`InventoryPage`/`CartPage`/`CheckoutPage`/`HeaderComponent` page objects as the rest of the suite — no separate automation layer. A step's wording must stay unique across all step files (they're combined into one pool), so shared phrasing is defined once and reused across features — e.g. `Given I am on the Products page` lives in `cart.steps.ts` and is reused by `checkout.feature`, `logout.feature`, and `inventory.feature`; `Then I should land on the Products page` and `When I log in with username {string} and password {string}` live in `login.steps.ts` and are reused by `logout.feature`.
+3. **`features/steps/*.steps.ts`** — one step-definition file per feature, using `createBdd(test)` from `playwright-bdd`, where `test` is the fixture-extended test from `features/steps/fixtures.ts` (see [Custom Fixtures for Page Objects](#custom-fixtures-for-page-objects) below). Each step destructures the page object it needs (`{ inventory }`, `{ cart }`, `{ checkout }`, `{ login }`) directly from its arguments — no separate automation layer. A step's wording must stay unique across all step files (they're combined into one pool), so shared phrasing is defined once and reused across features — e.g. `Given I am on the Products page` lives in `cart.steps.ts` and is reused by `checkout.feature`, `logout.feature`, and `inventory.feature`; `Then I should land on the Products page` and `When I log in with username {string} and password {string}` live in `login.steps.ts` and are reused by `logout.feature`.
 4. **`playwright.config.ts`** — two `defineBddConfig()` calls compile the same `features/**/*.feature` glob into two separate output directories, split by the `@auth` tag:
    - `defineBddConfig({ tags: 'not @auth', ... })` → `.features-gen/`, for untagged scenarios (login). Backs the `bdd-chromium`/`bdd-firefox`/`bdd-webkit` projects, which — like `tests/login/*.spec.ts` — have **no** `dependencies: ['setup']` and **no** `storageState`.
    - `defineBddConfig({ tags: '@auth', outputDir: '.features-gen-auth', ... })` → `.features-gen-auth/`, for `@auth`-tagged scenarios (cart, checkout, logout, inventory). Backs the `bdd-chromium-auth`/`bdd-firefox-auth`/`bdd-webkit-auth` projects, which **do** declare `dependencies: ['setup']` and `storageState: authFile`, exactly like the plain `chromium`/`firefox`/`webkit` projects.
@@ -231,10 +240,78 @@ Playwright already has a first-class test runner with parallelism, tracing, retr
    Both output directories are gitignored build artifacts, regenerated on every run — same idea as `playwright/.auth/`.
 5. **`package.json`** — `npm run bddgen` runs the `bddgen` CLI to (re)generate the Playwright test files from the `.feature`/step files; `npm test` and `npm run test:ui` run it automatically before `playwright test`.
 
+### Custom Fixtures for Page Objects
+
+Every step needs a page object — `InventoryPage`, `CartPage`, `CheckoutPage`, or `LoginPage` — to actually interact with the app. `createBdd()` accepts an optional custom Playwright `test` instance, and if that `test` has been `.extend()`-ed with fixtures, every step gets those fixtures injected as part of its arguments, exactly like Playwright's built-in `page`/`context`/`browser` fixtures. This suite uses that to hand step definitions a ready-made page object instead of constructing one by hand in every step.
+
+**Without fixtures** — every step that needs a page object has to build one itself from `page`:
+
+```ts
+// createBdd() with no argument uses playwright-bdd's default `test`
+const { When, Then } = createBdd();
+
+When('I add {string} to the cart', async ({ page }, slug: string) => {
+  const inventory = new InventoryPage(page);   // ← repeated in every step that touches inventory
+  await inventory.addToCart(slug);
+});
+
+Then('the cart badge should show {string}', async ({ page }, count: string) => {
+  const inventory = new InventoryPage(page);   // ← same object, rebuilt again
+  await expect(inventory.header.cartBadge).toHaveText(count);
+});
+```
+
+**With fixtures** — `features/steps/fixtures.ts` extends `test` with one fixture per page object, and every step file passes that `test` into `createBdd()`:
+
+```ts
+// features/steps/fixtures.ts
+import { test as base } from 'playwright-bdd';
+import { InventoryPage } from '../../pages/InventoryPage';
+import { CartPage } from '../../pages/CartPage';
+// ...LoginPage, CheckoutPage follow the same pattern
+
+type PageFixtures = {
+  inventory: InventoryPage;
+  cart: CartPage;
+  // ...login, checkout
+};
+
+export const test = base.extend<PageFixtures>({
+  inventory: async ({ page }, use) => { await use(new InventoryPage(page)); },
+  cart: async ({ page }, use) => { await use(new CartPage(page)); },
+  // ...login, checkout follow the same pattern
+});
+```
+
+```ts
+// features/steps/cart.steps.ts
+import { createBdd } from 'playwright-bdd';
+import { test } from './fixtures';
+
+const { When, Then } = createBdd(test);   // ← pass the extended test in
+
+When('I add {string} to the cart', async ({ inventory }, slug: string) => {
+  await inventory.addToCart(slug);        // ← already built, just use it
+});
+
+Then('the cart badge should show {string}', async ({ inventory }, count: string) => {
+  await expect(inventory.header.cartBadge).toHaveText(count);
+});
+```
+
+| | Without fixtures | With fixtures |
+|---|---|---|
+| Getting a page object | `const inventory = new InventoryPage(page);` in every step body | `{ inventory }` destructured from the step's arguments |
+| `createBdd()` call | `createBdd()` — no argument, default test | `createBdd(test)` — the extended test from `fixtures.ts` |
+| Object construction | Happens once per *step*, even if the same step calls it repeatedly across a scenario | Happens once per *test* (Playwright caches the fixture for the test's duration) |
+| Adding a 5th page object | Copy-paste `new XPage(page)` into every step that needs it | Add one fixture entry to `fixtures.ts`; every step file gets it |
+
+The trade-off: fixtures add one extra file and one extra concept (a fixture vs. a plain object) to learn, and `fixtures.ts` must live inside the `steps` glob in `playwright.config.ts` (`features/steps/**/*.ts`) so `bddgen` can detect the exported `test` — placing it elsewhere requires the `importTestFrom` option instead. For a suite with a handful of page objects reused across many steps, the savings in boilerplate are worth that one-time setup cost.
+
 ### Steps to add a new feature file
 
 1. Write the scenario in a new `features/<name>.feature` file using `Given/When/Then`. If every scenario in the file needs a logged-in session, tag the `Feature:` line with `@auth`; otherwise leave it untagged.
-2. Add matching step definitions in `features/steps/<name>.steps.ts` (or reuse existing steps where the wording matches exactly — duplicate step text across files will fail generation).
+2. Add matching step definitions in `features/steps/<name>.steps.ts` (or reuse existing steps where the wording matches exactly — duplicate step text across files will fail generation). Start the file with `import { createBdd } from 'playwright-bdd'; import { test } from './fixtures'; const { Given, When, Then } = createBdd(test);` and destructure the page object you need (`{ inventory }`, `{ cart }`, etc.) from each step's arguments. If the scenario needs a page object that doesn't have a fixture yet, add one to `features/steps/fixtures.ts` first (see [Custom Fixtures for Page Objects](#custom-fixtures-for-page-objects)).
 3. Run `npm run bddgen` to regenerate `.features-gen/`/`.features-gen-auth/`, then run just that scenario while iterating:
    - Untagged: `npx playwright test --project=bdd-chromium`
    - `@auth`-tagged: `npx playwright test --project=bdd-chromium-auth`
