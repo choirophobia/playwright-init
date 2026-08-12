@@ -214,6 +214,14 @@ Because `dependencies: ['setup']` is a **project-level** dependency, the login s
 
 Alongside the plain `tests/*.spec.ts` suite, this project also runs a parallel BDD/Gherkin suite via [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/), covering the same scenarios as `tests/login/`, `tests/cart/`, `tests/checkout/`, `tests/logout/`, and `tests/inventory/`. It's a growing suite — more `.feature` files can be added the same way as coverage expands.
 
+### What is BDD?
+
+BDD (Behavior-Driven Development) is a way of writing tests as plain-language scenarios — `Given/When/Then` steps in [Gherkin](https://cucumber.io/docs/gherkin/), the syntax [Cucumber](https://cucumber.io/) popularized — instead of raw test code. A `.feature` file like `features/cart.feature` reads as a spec anyone can follow (`When I add "sauce-labs-backpack" to the cart / Then the cart badge should show "1"`), while a `.steps.ts` file maps each line to the actual Playwright code that runs it.
+
+**Why use it:** it gives non-engineers (PMs, QA, stakeholders) a version of the test suite they can read and review without knowing TypeScript, and it forces scenarios to be described in terms of user-visible behavior rather than implementation details — which tends to produce more resilient tests. The step-reuse system also means a vocabulary of steps (`Given I am on the Products page`, `Then the cart badge should show {string}`) builds up over time, so new scenarios are often just new combinations of existing steps.
+
+**When to reach for it:** it's worth the extra layer (a `.feature` file plus a `.steps.ts` file plus keeping step wording unique — see [Custom Fixtures for Page Objects](#custom-fixtures-for-page-objects) and the notes on duplicate steps below) when a team actually has non-engineers reading or writing scenarios, or when a shared step vocabulary will get reused a lot. For a solo project or a small team that's comfortable reading TypeScript directly, plain `tests/*.spec.ts` files — like the ones this suite already has — are simpler to write and debug, with no translation layer between the Gherkin text and the code that runs it. This repo runs both side by side deliberately, as a comparison.
+
 ### Why playwright-bdd instead of plain Cucumber.js
 
 Playwright already has a first-class test runner with parallelism, tracing, retries, an HTML reporter, and (in this repo) the `storageState`-based auth setup described above. Running Cucumber via its own standalone runner (`@cucumber/cucumber` / `cucumber-js`) would mean a second, separate test runner with none of that — you'd have to hand-roll browser launch/teardown and manually reload the storage state file yourself.
