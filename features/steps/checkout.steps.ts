@@ -26,18 +26,6 @@ When(
   },
 );
 
-When('I fill in the first name field with {string}', async ({ checkout }, value: string) => {
-  await checkout.firstNameField.fill(value);
-});
-
-When('I fill in the last name field with {string}', async ({ checkout }, value: string) => {
-  await checkout.lastNameField.fill(value);
-});
-
-When('I fill in the postal code field with {string}', async ({ checkout }, value: string) => {
-  await checkout.postalCodeField.fill(value);
-});
-
 When('I continue to the overview step', async ({ checkout }) => {
   await checkout.continueToOverview();
 });

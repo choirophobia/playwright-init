@@ -7,14 +7,21 @@ Feature: Logout
   Background:
     Given I am on the Products page
 
+  Scenario Outline: The side menu shows all navigation links
+    When I open the menu
+    Then the menu should show "<label>"
+
+    Examples: the <label> link
+      | label           |
+      | All Items       |
+      | About           |
+      | Logout          |
+      | Reset App State |
+      | Close Menu      |
+
   Scenario: Logout from the Products page returns user to the login screen
     When I open the menu
-    Then the menu should show "All Items"
-    And the menu should show "About"
-    And the menu should show "Logout"
-    And the menu should show "Reset App State"
-    And the menu should show "Close Menu"
-    When I click Logout
+    And I click Logout
     Then I should be redirected to the login page
     And the username and password fields should be empty
     When I navigate directly to "/inventory.html"
