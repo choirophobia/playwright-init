@@ -11,6 +11,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 - [Architecture](#architecture)
 - [Authentication (Storage State)](#authentication-storage-state)
 - [BDD Tests (Cucumber)](#bdd-tests-cucumber)
+- [Accessibility Testing](#accessibility-testing)
 - [Test Coverage](#test-coverage)
 - [Continuous Integration](#continuous-integration)
 - [AI-Assisted Workflow](#ai-assisted-workflow)
@@ -22,6 +23,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 | [`@playwright/test`](https://playwright.dev/) | Test runner, assertions, browser automation |
 | TypeScript | Static typing for tests and page objects |
 | [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) | Generates native Playwright tests from Gherkin `.feature` files |
+| [`@axe-core/playwright`](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright) | Automated WCAG accessibility scans (axe-core rule engine) |
 | Chromium / Firefox / WebKit | Cross-browser test projects |
 | GitHub Actions | CI — runs the suite on push, PR, and a daily schedule |
 | Discord Webhook | CI pass/fail notifications |
@@ -43,6 +45,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   ├── cart/               # Authenticated via saved storage state
 │   ├── checkout/           # Authenticated via saved storage state
 │   ├── logout/             # Authenticated via saved storage state
+│   ├── accessibility/      # axe-core scans of each core page — see Accessibility Testing
 │   └── seed.spec.ts        # Blank seed test used by the AI test generator
 ├── features/                 # Gherkin BDD scenarios (playwright-bdd)
 │   ├── login.feature        # Same login coverage as tests/login/, untagged (unauthenticated)
@@ -50,13 +53,17 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   ├── checkout.feature     # Same checkout coverage as tests/checkout/, tagged @auth
 │   ├── logout.feature       # Same logout coverage as tests/logout/, tagged @auth
 │   ├── inventory.feature    # Same inventory coverage as tests/inventory/, tagged @auth
+│   ├── accessibility.feature # Same accessibility coverage as tests/accessibility/, tagged per-scenario
 │   └── steps/
-│       ├── fixtures.ts         # Custom `test` injecting page objects as fixtures — see below
-│       ├── login.steps.ts      # Login step definitions
-│       ├── cart.steps.ts       # Cart step definitions
-│       ├── checkout.steps.ts   # Checkout step definitions
-│       ├── logout.steps.ts     # Logout step definitions
-│       └── inventory.steps.ts  # Inventory step definitions
+│       ├── fixtures.ts           # Custom `test` injecting page objects as fixtures — see below
+│       ├── login.steps.ts        # Login step definitions
+│       ├── cart.steps.ts         # Cart step definitions
+│       ├── checkout.steps.ts     # Checkout step definitions
+│       ├── logout.steps.ts       # Logout step definitions
+│       ├── inventory.steps.ts    # Inventory step definitions
+│       └── accessibility.steps.ts # Accessibility step definitions
+├── utils/
+│   └── axe.ts               # Shared axe-core scan + assertion helper — see Accessibility Testing
 ├── specs/                  # Human-readable test plans (Markdown)
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
@@ -328,11 +335,40 @@ Each outline's `Examples:` block is also named with a placeholder — e.g. `Exam
 
 ### Steps to add a new feature file
 
-1. Write the scenario in a new `features/<name>.feature` file using `Given/When/Then`. If every scenario in the file needs a logged-in session, tag the `Feature:` line with `@auth`; otherwise leave it untagged.
+1. Write the scenario in a new `features/<name>.feature` file using `Given/When/Then`. If every scenario in the file needs a logged-in session, tag the `Feature:` line with `@auth`; if the file mixes unauthenticated and authenticated scenarios (like `accessibility.feature`), leave the `Feature:` line untagged and put `@auth` above just the scenarios that need it — the tag filter resolves per-scenario either way.
 2. Add matching step definitions in `features/steps/<name>.steps.ts` (or reuse existing steps where the wording matches exactly — duplicate step text across files will fail generation). Start the file with `import { createBdd } from 'playwright-bdd'; import { test } from './fixtures'; const { Given, When, Then } = createBdd(test);` and destructure the page object you need (`{ inventory }`, `{ cart }`, etc.) from each step's arguments. If the scenario needs a page object that doesn't have a fixture yet, add one to `features/steps/fixtures.ts` first (see [Custom Fixtures for Page Objects](#custom-fixtures-for-page-objects)).
 3. Run `npm run bddgen` to regenerate `.features-gen/`/`.features-gen-auth/`, then run just that scenario while iterating:
    - Untagged: `npx playwright test --project=bdd-chromium`
    - `@auth`-tagged: `npx playwright test --project=bdd-chromium-auth`
+
+## Accessibility Testing
+
+### Why bother with this
+
+Every other suite of tests in this repo checks that the app *functions* — you can log in, add items, check out. None of them check whether the app is actually *usable* by someone navigating with a screen reader, voice control, or keyboard only. That's a different, and commonly skipped, category of bug: a button with no accessible name, a page with no heading, a form field with no label — all invisible if you're testing by looking at the screen and clicking with a mouse, all real barriers for someone who isn't. Automated accessibility testing catches the mechanically-detectable subset of these — roughly 30-50% of WCAG success criteria, per axe-core's own numbers; the rest (does this alt text actually make sense, is this focus order logical) still needs a human — but that subset is cheap to run on every commit once it's wired up, which is exactly the kind of check that's valuable precisely because nobody remembers to do it by hand.
+
+### How it's wired up
+
+1. **`utils/axe.ts`** — `expectNoSeriousAccessibilityViolations(page, options?)` runs an [`axe-core`](https://github.com/dequelabs/axe-core) scan via `AxeBuilder` and asserts on the results. axe-core buckets every violation it finds into an impact level: `critical`, `serious`, `moderate`, or `minor`. This helper only fails the test on `critical`/`serious` — the two levels axe itself considers most likely to actually block a user — and lists each one (rule id, impact, help text, node count, docs link) in the failure message if it does fail.
+2. **`tests/accessibility/*.spec.ts`** — one plain Playwright spec per core page (login, products, cart, checkout information, checkout overview), each navigating to that page the same way its functional-test counterpart does, then calling the helper.
+3. **`features/accessibility.feature`** + **`features/steps/accessibility.steps.ts`** — the same coverage expressed as Gherkin, reusing existing navigation steps (`Given I am on the Products page`, `When I add {string} to the cart`, etc.) and adding one new `Then` step for the assertion itself.
+
+### The `moderate`/`minor` threshold — and the "known gap" pattern
+
+Scanning the real, unmodified `saucedemo.com` surfaces genuine violations — this isn't a synthetic demo. Every page in this suite has 3 sitewide `moderate` findings (missing `<main>` landmark, missing `<h1>`, content not contained in a landmark region) that are intentionally **not** asserted on: blocking the whole suite on structural findings that are the same on every single page would just make the suite red forever without pointing at anything actionable, which trains people to ignore it. `critical`/`serious` is the threshold most real CI accessibility gates use for exactly this reason — it keeps the bar meaningful.
+
+The products/inventory page has one `critical` finding beyond that baseline: its sort `<select>` has no accessible name (no `<label>`, `aria-label`, or `aria-labelledby` — a screen reader announces it as just "combo box", with no indication of what it controls). Rather than quietly excluding that from the assertion and losing track of it, this suite follows the same pattern already used elsewhere for known, real app gaps (see `tests/inventory/reset-app-state-stale-button.spec.ts` and `invalid-product-id.spec.ts` for the UI-desync and unguarded-route equivalents):
+
+- `products-page.spec.ts` / `accessibility.feature`'s first Products scenario asserts no `critical`/`serious` violations **except** `select-name` (via `{ ignoreRuleIds: ['select-name'] }`), so a *new* critical/serious issue on that page still fails the build.
+- A second, explicitly-named test — `"Products page sort dropdown is missing an accessible name (known accessibility gap)"` — asserts that specific violation is still present. If a future SauceDemo change fixes it, this test starts failing, which is a signal to remove the exclusion above, not a bug in the test.
+
+This means the suite stays 100% green while still telling the truth about what it found, which is arguably the more interesting result to show in an interview than a suite that's silently scoped to avoid ever going red.
+
+### Adding a new page to the accessibility suite
+
+1. Plain spec: add `tests/accessibility/<page-name>.spec.ts`, navigate to the page the same way its functional spec does, then `await expectNoSeriousAccessibilityViolations(page)`.
+2. BDD: add a scenario to `features/accessibility.feature` (tag it `@auth` if the page needs a session) reusing existing navigation steps, ending with `Then the page should have no critical or serious accessibility violations`.
+3. If it fails on a real, pre-existing violation you don't want to fix right now, don't just add it to an ignore list silently — follow the pattern above: exclude that specific rule ID with a comment referencing a second test that documents the gap explicitly.
 
 ## Test Coverage
 
@@ -345,11 +381,13 @@ Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md
 | **Cart** | `tests/cart/` (4) | Adding single/multiple items, removing items, viewing cart |
 | **Checkout** | `tests/checkout/` (5) | Completing orders (single/multiple items), required-field validation, cancelling checkout, whitespace-only field validation gap |
 | **Logout** | `tests/logout/` (2) | Logging out, logging out with items still in cart |
+| **Accessibility** | `tests/accessibility/` (6) | axe-core scans of login, products, cart, and both checkout steps for `critical`/`serious` WCAG violations; documents one known gap (products page sort dropdown missing an accessible name) — see [Accessibility Testing](#accessibility-testing) |
 | **Login (BDD)** | `features/login.feature` (3 scenario definitions → 4 generated tests) | Same login coverage as `tests/login/`, expressed as Gherkin; the blank-required-field case is a Scenario Outline — see [BDD Tests](#bdd-tests-cucumber) |
 | **Cart (BDD)** | `features/cart.feature` (4 scenarios) | Same cart coverage as `tests/cart/`, expressed as Gherkin and tagged `@auth` — see [BDD Tests](#bdd-tests-cucumber) |
 | **Checkout (BDD)** | `features/checkout.feature` (6 scenario definitions → 8 generated tests) | Same checkout coverage as `tests/checkout/`, expressed as Gherkin and tagged `@auth`; required-field validation is a Scenario Outline — see [BDD Tests](#bdd-tests-cucumber) |
 | **Logout (BDD)** | `features/logout.feature` (3 scenario definitions → 7 generated tests) | Same logout coverage as `tests/logout/`, expressed as Gherkin and tagged `@auth`; the side-menu-links check is a Scenario Outline — see [BDD Tests](#bdd-tests-cucumber) |
 | **Inventory (BDD)** | `features/inventory.feature` (6 scenarios) | Same inventory coverage as `tests/inventory/`, expressed as Gherkin and tagged `@auth` — see [BDD Tests](#bdd-tests-cucumber) |
+| **Accessibility (BDD)** | `features/accessibility.feature` (6 scenarios) | Same accessibility coverage as `tests/accessibility/`, expressed as Gherkin with `@auth` tagged per-scenario (the login scenario stays untagged) — see [Accessibility Testing](#accessibility-testing) |
 
 ## Continuous Integration
 
