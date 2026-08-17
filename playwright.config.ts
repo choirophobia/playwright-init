@@ -48,8 +48,15 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  /*
+   * Reporter to use. See https://playwright.dev/docs/test-reporters
+   * On CI, adds Playwright's built-in `github` reporter alongside the HTML report: it
+   * turns test failures into inline annotations on the PR diff in GitHub's UI, using
+   * the `::error::` workflow command — no extra dependency, no extra CI step, since
+   * Playwright ships it and .github/workflows/playwright.yml already sets CI=true.
+   * See README: Continuous Integration.
+   */
+  reporter: process.env.CI ? [['html'], ['github']] : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
