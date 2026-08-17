@@ -134,15 +134,22 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
+    /*
+     * Mobile viewport projects: run the plain tests/*.spec.ts suite (not the BDD
+     * suite — same scenarios, so duplicating them across 5 browser profiles wouldn't
+     * add coverage, just runtime) at real device viewport/UA, same auth setup as the
+     * desktop projects. See README: Mobile & Responsive Testing.
+     */
+    {
+      name: 'Mobile Chrome',
+      use: { ...devices['Pixel 5'], storageState: authFile },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'Mobile Safari',
+      use: { ...devices['iPhone 12'], storageState: authFile },
+      dependencies: ['setup'],
+    },
 
     /* Test against branded browsers. */
     // {
