@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Keep npm packages (@playwright/test, playwright-bdd, @axe-core/playwright,
+  # typescript, etc.) up to date — including security patches.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+
+  # Keep the pinned action versions in .github/workflows/ (actions/checkout,
+  # actions/setup-node, actions/upload-artifact) up to date.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"

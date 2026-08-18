@@ -27,6 +27,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 | Chromium / Firefox / WebKit | Cross-browser test projects |
 | GitHub Actions | CI — runs the suite on push, PR, and a daily schedule |
 | Discord Webhook | CI pass/fail notifications |
+| [Dependabot](https://docs.github.com/en/code-security/dependabot) | Weekly automated PRs for npm and GitHub Actions dependency updates |
 
 ## Project Structure
 
@@ -67,7 +68,9 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 ├── specs/                  # Human-readable test plans (Markdown)
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
-├── .github/workflows/      # CI pipeline
+├── .github/
+│   ├── workflows/          # CI pipeline
+│   └── dependabot.yml      # Weekly npm + GitHub Actions dependency update PRs
 └── .mcp.json               # Playwright MCP server config
 ```
 
@@ -398,6 +401,17 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 - Manual dispatch
 
 Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
+
+### Keeping dependencies up to date (Dependabot)
+
+This is a different kind of "test" than everything else in this README — it's not about whether the app works, it's about whether the *tools testing the app* stay current. Left alone, `package.json` slowly drifts out of date: a security fix ships for `@playwright/test` and nobody notices, or a GitHub Action gets deprecated and nobody's watching for it. Nobody enjoys doing that check by hand, which is exactly why it tends not to happen — so instead of relying on remembering, `.github/dependabot.yml` tells GitHub to check for us.
+
+**What it actually does:** once a week, [Dependabot](https://docs.github.com/en/code-security/dependabot) (built into GitHub, free, nothing to install) checks two places for newer versions:
+
+1. **npm packages** — `@playwright/test`, `playwright-bdd`, `@axe-core/playwright`, `typescript`, everything in `package.json`.
+2. **GitHub Actions versions** — the pinned versions in `.github/workflows/playwright.yml` (`actions/checkout@v4`, `actions/setup-node@v4`, `actions/upload-artifact@v4`).
+
+If it finds something newer, it opens a normal pull request bumping the version — which then runs through the exact same CI checks (the full Playwright suite, same as any other PR) that a human-opened PR would. Nothing merges automatically; a human still reviews and clicks merge. It just means the "is there an update available?" question gets asked every week automatically, instead of "whenever someone happens to think of it" (which in practice is closer to "never").
 
 ## AI-Assisted Workflow
 
