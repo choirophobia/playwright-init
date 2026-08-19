@@ -434,6 +434,12 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 
 Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
 
+### PR annotations (`github` reporter)
+
+`playwright.config.ts` sets `reporter: process.env.CI ? [['html'], ['github']] : 'html'` — locally you still get just the HTML report, but on CI, Playwright's built-in `github` reporter runs alongside it. It's part of `@playwright/test` itself (no extra dependency, no extra workflow step), and it turns each test failure into a [workflow command](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions) (`::error file=...,line=...::`) that GitHub Actions renders as an inline annotation directly on the changed lines of a PR diff, plus a run summary annotation with the pass/fail counts.
+
+This sits between the two reporting options discussed for this project: a bare HTML artifact (you have to open it to know anything went wrong) and a full external dashboard like Allure (real value, but a Java runtime, an extra CI step, and persistent storage to get it — see the trade-off note this project settled on). The `github` reporter is the free middle ground — zero setup cost, and failures show up exactly where a reviewer is already looking, without needing to click into the Discord notification or download the HTML artifact first.
+
 ## AI-Assisted Workflow
 
 This suite is built using the Playwright MCP **planner → generator → healer** loop:
