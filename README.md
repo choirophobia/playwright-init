@@ -153,6 +153,32 @@ Key settings in `playwright.config.ts`:
 - **CI behavior:** `test.only` is forbidden, tests retry twice, and run with a single worker
 - **Projects:** a `setup` project runs `tests/auth.setup.ts` once, and the `chromium`/`firefox`/`webkit`/`bdd-*-auth` projects each depend on it and reuse its saved session (see below)
 
+### Soft Assertions
+
+Most assertions in this suite use plain `expect()`, which throws immediately on failure — the right default, since most checks depend on the one before it (there's no point asserting the checkout total if the page never navigated to checkout at all). But `tests/inventory/browse-products.spec.ts` (and its BDD equivalent, the `each product should show an image, name, description, price, and an Add to cart button` step in `features/steps/inventory.steps.ts`) loops over all 6 products checking 5 independent fields each. With plain `expect()`, if product #1's image was broken, the test stops right there — products #2 through #6 never get checked at all in that run, and the failure message only ever tells you about product #1.
+
+```ts
+// Plain expect(): stops at the first failure, other 5 products go unchecked
+for (const item of items) {
+  await expect(itemImage(item)).toBeVisible();       // if this throws...
+  await expect(itemName(item)).toBeVisible();        // ...none of this runs,
+  // ...                                              // for this item or any after it
+}
+
+// expect.soft(): records the failure and keeps going
+for (const item of items) {
+  await expect.soft(itemImage(item)).toBeVisible();  // failure recorded, loop continues
+  await expect.soft(itemName(item)).toBeVisible();
+  // ...
+}
+// test.info().errors now lists every soft failure across all 6 products;
+// Playwright still marks the test as failed overall once it finishes
+```
+
+Both loops in this suite use `expect.soft()` for exactly this reason: these 30 checks (6 products × 5 fields) are genuinely independent of each other, so there's no reason a broken image on product #1 should hide a broken price on product #4. The test still fails overall if *any* soft assertion fails — soft assertions don't make failures invisible, they just stop the first one from hiding the rest.
+
+**When not to reach for it:** anywhere a later assertion only makes sense if an earlier one passed (navigated to the right page, an element that should exist before you check its contents). Soft-asserting those just produces a wall of confusing downstream errors that are really one root cause — save it for loops over independent, same-shape checks like this one.
+
 ## Authentication (Storage State)
 
 Nearly every spec in this suite needs a logged-in session before it can test anything interesting. Logging in through the UI on every single test works, but it's slow (an extra page load + form submit per test) and it means your "add to cart" test is silently also an implicit login test — if the login page ever changes, unrelated tests start failing for the wrong reason.
