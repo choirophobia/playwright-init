@@ -13,6 +13,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 - [BDD Tests (Cucumber)](#bdd-tests-cucumber)
 - [Accessibility Testing](#accessibility-testing)
 - [Visual Regression Testing](#visual-regression-testing)
+- [Mobile & Responsive Testing](#mobile--responsive-testing)
 - [Test Coverage](#test-coverage)
 - [Continuous Integration](#continuous-integration)
 - [AI-Assisted Workflow](#ai-assisted-workflow)
@@ -102,6 +103,9 @@ npx playwright test tests/cart
 # Run against a single browser project
 npx playwright test --project=chromium
 
+# Run only the mobile viewport projects (Pixel 5 / iPhone 12 emulation)
+npx playwright test --project="Mobile Chrome" --project="Mobile Safari"
+
 # Run only the BDD/Gherkin scenarios (unauthenticated, e.g. login)
 npx playwright test --project=bdd-chromium
 
@@ -153,11 +157,37 @@ Instead of repeating `login.goto()` + `login.login(...)` at the top of every spe
 Key settings in `playwright.config.ts`:
 
 - **Base URL:** `https://www.saucedemo.com`
-- **Browsers:** Chromium, Firefox, WebKit (Chromium runs headless by default)
+- **Browsers:** Chromium, Firefox, WebKit (Chromium runs headless by default), plus `Mobile Chrome` (Pixel 5) and `Mobile Safari` (iPhone 12) — see [Mobile & Responsive Testing](#mobile--responsive-testing)
 - **Reporter:** HTML (`playwright-report/`)
 - **Tracing:** captured on first retry
 - **CI behavior:** `test.only` is forbidden, tests retry twice, and run with a single worker
 - **Projects:** a `setup` project runs `tests/auth.setup.ts` once, and the `chromium`/`firefox`/`webkit`/`bdd-*-auth` projects each depend on it and reuse its saved session (see below)
+
+### Soft Assertions
+
+Most assertions in this suite use plain `expect()`, which throws immediately on failure — the right default, since most checks depend on the one before it (there's no point asserting the checkout total if the page never navigated to checkout at all). But `tests/inventory/browse-products.spec.ts` (and its BDD equivalent, the `each product should show an image, name, description, price, and an Add to cart button` step in `features/steps/inventory.steps.ts`) loops over all 6 products checking 5 independent fields each. With plain `expect()`, if product #1's image was broken, the test stops right there — products #2 through #6 never get checked at all in that run, and the failure message only ever tells you about product #1.
+
+```ts
+// Plain expect(): stops at the first failure, other 5 products go unchecked
+for (const item of items) {
+  await expect(itemImage(item)).toBeVisible();       // if this throws...
+  await expect(itemName(item)).toBeVisible();        // ...none of this runs,
+  // ...                                              // for this item or any after it
+}
+
+// expect.soft(): records the failure and keeps going
+for (const item of items) {
+  await expect.soft(itemImage(item)).toBeVisible();  // failure recorded, loop continues
+  await expect.soft(itemName(item)).toBeVisible();
+  // ...
+}
+// test.info().errors now lists every soft failure across all 6 products;
+// Playwright still marks the test as failed overall once it finishes
+```
+
+Both loops in this suite use `expect.soft()` for exactly this reason: these 30 checks (6 products × 5 fields) are genuinely independent of each other, so there's no reason a broken image on product #1 should hide a broken price on product #4. The test still fails overall if *any* soft assertion fails — soft assertions don't make failures invisible, they just stop the first one from hiding the rest.
+
+**When not to reach for it:** anywhere a later assertion only makes sense if an earlier one passed (navigated to the right page, an element that should exist before you check its contents). Soft-asserting those just produces a wall of confusing downstream errors that are really one root cause — save it for loops over independent, same-shape checks like this one.
 
 ## Authentication (Storage State)
 
@@ -427,9 +457,40 @@ npx playwright test tests/visual --project=chromium --update-snapshots
 
 Then look at the diff of the new PNG (`npx playwright show-report` shows a side-by-side before/after for any run that failed a comparison) to confirm the change is the one you expected, and commit it like any other file.
 
+## Mobile & Responsive Testing
+
+### Why bother with this
+
+Every test in this suite, before this change, ran at a desktop viewport. That leaves an entire dimension of the app completely unverified: does the hamburger menu still work with a touch tap instead of a mouse click? Does the product grid reflow sensibly on a 393px-wide screen instead of overflowing or clipping? Real users hit this app from real phones, and a regression here (a button that becomes unreachable, text that overflows its container) is invisible to a suite that only ever runs at 1280×720 on desktop Chrome. Testing at real device viewports is one of the highest-value, lowest-effort additions you can make to an E2E suite — Playwright ships the device profiles already, most of the time it's a config change, not new test code.
+
+### How it's wired up
+
+`playwright.config.ts` adds two projects using Playwright's built-in device descriptors:
+
+```ts
+{
+  name: 'Mobile Chrome',
+  use: { ...devices['Pixel 5'], storageState: authFile },
+  dependencies: ['setup'],
+},
+{
+  name: 'Mobile Safari',
+  use: { ...devices['iPhone 12'], storageState: authFile },
+  dependencies: ['setup'],
+},
+```
+
+`devices['Pixel 5']` / `devices['iPhone 12']` bundle the real viewport size, device scale factor, user agent string, and touch/mobile emulation flags for that device — the same profiles Playwright ships for its own examples. Both projects `dependencies: ['setup']` and `storageState: authFile` exactly like the desktop `chromium`/`firefox`/`webkit` projects (see [Authentication](#authentication-storage-state)), so they run the same `tests/*.spec.ts` suite, just at a different viewport/UA.
+
+**Scope decision:** these two projects run the plain `tests/*.spec.ts` suite, not the BDD suite in `features/`. Both suites already cover the same scenarios (that's the whole point of the BDD suite mirroring the plain one — see [BDD Tests](#bdd-tests-cucumber)), so running both across 5 browser profiles each would double runtime for zero new coverage. If a mobile-specific *scenario* ever comes up (something that only makes sense to test at a mobile viewport, not just "the same test again on a smaller screen"), that's a better reason to add BDD mobile coverage than routine duplication.
+
+### What this run actually found
+
+Worth being honest about: this pass didn't turn up a responsive-layout bug. All 55 tests in `tests/` pass unchanged at both the Pixel 5 and iPhone 12 profiles — SauceDemo's layout holds up fine at those viewports, and Playwright's touch emulation drives the hamburger menu, sort dropdown, and cart/checkout flow the same way a mouse click does. That's a legitimate, useful result, not a wasted one: the suite now has continuous evidence that mobile behavior matches desktop behavior, and if a future change to the app (or this suite's own locators) breaks that, these two projects are what catches it. Not finding a bug on the first run is a different outcome than not looking.
+
 ## Test Coverage
 
-Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md) and implemented as specs under `tests/`, using the `standard_user` account. Locked-out, problem, and other special demo accounts are out of scope.
+Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md) and implemented as specs under `tests/`, using the `standard_user` account. Locked-out, problem, and other special demo accounts are out of scope. The counts below are per-file/scenario; `tests/*.spec.ts` actually runs across 5 browser projects (`chromium`, `firefox`, `webkit`, `Mobile Chrome`, `Mobile Safari` — see [Mobile & Responsive Testing](#mobile--responsive-testing)), and the BDD suite across 6 (`bdd-{chromium,firefox,webkit}` and their `-auth` counterparts).
 
 | Area | Spec Files | Covers |
 |---|---|---|
@@ -456,6 +517,12 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 - Manual dispatch
 
 Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
+
+### PR annotations (`github` reporter)
+
+`playwright.config.ts` sets `reporter: process.env.CI ? [['html'], ['github']] : 'html'` — locally you still get just the HTML report, but on CI, Playwright's built-in `github` reporter runs alongside it. It's part of `@playwright/test` itself (no extra dependency, no extra workflow step), and it turns each test failure into a [workflow command](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions) (`::error file=...,line=...::`) that GitHub Actions renders as an inline annotation directly on the changed lines of a PR diff, plus a run summary annotation with the pass/fail counts.
+
+This sits between the two reporting options discussed for this project: a bare HTML artifact (you have to open it to know anything went wrong) and a full external dashboard like Allure (real value, but a Java runtime, an extra CI step, and persistent storage to get it — see the trade-off note this project settled on). The `github` reporter is the free middle ground — zero setup cost, and failures show up exactly where a reviewer is already looking, without needing to click into the Discord notification or download the HTML artifact first.
 
 ## AI-Assisted Workflow
 

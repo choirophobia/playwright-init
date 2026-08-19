@@ -5,14 +5,16 @@ import { test } from './fixtures';
 const { When, Then } = createBdd(test);
 
 Then('each product should show an image, name, description, price, and an Add to cart button', async ({ inventory }) => {
+  // Soft assertions: check every product even if one is missing a field, instead of
+  // stopping at the first failure and leaving the other 5 products unverified.
   const count = await inventory.items.count();
   for (let i = 0; i < count; i++) {
     const item = inventory.items.nth(i);
-    await expect(inventory.itemImage(item)).toBeVisible();
-    await expect(inventory.itemName(item)).toBeVisible();
-    await expect(inventory.itemDesc(item)).toBeVisible();
-    await expect(inventory.itemPrice(item)).toHaveText(/^\$\d+\.\d{2}$/);
-    await expect(inventory.itemAddToCartButton(item)).toBeVisible();
+    await expect.soft(inventory.itemImage(item)).toBeVisible();
+    await expect.soft(inventory.itemName(item)).toBeVisible();
+    await expect.soft(inventory.itemDesc(item)).toBeVisible();
+    await expect.soft(inventory.itemPrice(item)).toHaveText(/^\$\d+\.\d{2}$/);
+    await expect.soft(inventory.itemAddToCartButton(item)).toBeVisible();
   }
 });
 
