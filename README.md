@@ -30,6 +30,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 | Chromium / Firefox / WebKit | Cross-browser test projects |
 | GitHub Actions | CI — runs the suite on push, PR, and a daily schedule |
 | Discord Webhook | CI pass/fail notifications |
+| [Dependabot](https://docs.github.com/en/code-security/dependabot) | Weekly automated PRs for npm and GitHub Actions dependency updates |
 
 ## Project Structure
 
@@ -72,7 +73,9 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 ├── specs/                  # Human-readable test plans (Markdown)
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
-├── .github/workflows/      # CI pipeline
+├── .github/
+│   ├── workflows/          # CI pipeline
+│   └── dependabot.yml      # Weekly npm + GitHub Actions dependency update PRs
 └── .mcp.json               # Playwright MCP server config
 ```
 
@@ -523,6 +526,17 @@ Each run installs dependencies and browsers, generates the BDD test files (`npx 
 `playwright.config.ts` sets `reporter: process.env.CI ? [['html'], ['github']] : 'html'` — locally you still get just the HTML report, but on CI, Playwright's built-in `github` reporter runs alongside it. It's part of `@playwright/test` itself (no extra dependency, no extra workflow step), and it turns each test failure into a [workflow command](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions) (`::error file=...,line=...::`) that GitHub Actions renders as an inline annotation directly on the changed lines of a PR diff, plus a run summary annotation with the pass/fail counts.
 
 This sits between the two reporting options discussed for this project: a bare HTML artifact (you have to open it to know anything went wrong) and a full external dashboard like Allure (real value, but a Java runtime, an extra CI step, and persistent storage to get it — see the trade-off note this project settled on). The `github` reporter is the free middle ground — zero setup cost, and failures show up exactly where a reviewer is already looking, without needing to click into the Discord notification or download the HTML artifact first.
+
+### Keeping dependencies up to date (Dependabot)
+
+This is a different kind of "test" than everything else in this README — it's not about whether the app works, it's about whether the *tools testing the app* stay current. Left alone, `package.json` slowly drifts out of date: a security fix ships for `@playwright/test` and nobody notices, or a GitHub Action gets deprecated and nobody's watching for it. Nobody enjoys doing that check by hand, which is exactly why it tends not to happen — so instead of relying on remembering, `.github/dependabot.yml` tells GitHub to check for us.
+
+**What it actually does:** once a week, [Dependabot](https://docs.github.com/en/code-security/dependabot) (built into GitHub, free, nothing to install) checks two places for newer versions:
+
+1. **npm packages** — `@playwright/test`, `playwright-bdd`, `@axe-core/playwright`, `typescript`, everything in `package.json`.
+2. **GitHub Actions versions** — the pinned versions in `.github/workflows/playwright.yml` (`actions/checkout@v4`, `actions/setup-node@v4`, `actions/upload-artifact@v4`).
+
+If it finds something newer, it opens a normal pull request bumping the version — which then runs through the exact same CI checks (the full Playwright suite, same as any other PR) that a human-opened PR would. Nothing merges automatically; a human still reviews and clicks merge. It just means the "is there an update available?" question gets asked every week automatically, instead of "whenever someone happens to think of it" (which in practice is closer to "never").
 
 ## AI-Assisted Workflow
 
