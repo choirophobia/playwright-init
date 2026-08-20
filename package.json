@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "bddgen": "bddgen",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "npm run bddgen && playwright test",
     "test:ui": "npm run bddgen && playwright test --ui"
