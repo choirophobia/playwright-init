@@ -96,8 +96,8 @@ npx playwright install
 ## Running Tests
 
 ```bash
-# Lint the whole project (no test run, no browsers needed)
-npm run lint
+# Type-check the whole project (no test run, no browsers needed)
+npm run typecheck
 
 # Run the full suite headless (all browsers, incl. BDD scenarios)
 npm test
