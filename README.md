@@ -76,7 +76,9 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
 ├── eslint.config.js        # ESLint + eslint-plugin-playwright + typescript-eslint rules
 ├── .github/
-│   ├── workflows/          # CI pipeline
+│   ├── workflows/
+│   │   ├── playwright.yml               # Main CI pipeline
+│   │   └── update-visual-baselines.yml  # Manual — regenerates visual regression baselines on Linux
 │   └── dependabot.yml      # Weekly npm + GitHub Actions dependency update PRs
 └── .mcp.json               # Playwright MCP server config
 ```
@@ -447,17 +449,21 @@ That means a baseline screenshot taken on a Mac and a screenshot taken on Linux 
 - Locally, on a Mac, these tests pass against the macOS baseline already committed.
 - On CI (Linux), the first run will report "no baseline found" for each of these 5 tests and fail — not because anything is actually broken, but because the Linux-named baseline file doesn't exist yet.
 
-**How to fix that (a one-time step):** generate the real baselines on Linux — either inside CI itself, or in a Linux/Docker environment with working network access — by running:
+**How to fix that:** `.github/workflows/update-visual-baselines.yml` exists for exactly this. It's a manual-only (`workflow_dispatch`) workflow that runs on `ubuntu-latest` — the same runner Playwright Tests itself uses — regenerates the baselines with `--update-snapshots`, and uploads them as a downloadable artifact. It does **not** commit automatically; a baseline changing silently, with no human looking at the new image, is exactly the failure mode you don't want from a visual-regression tool.
 
 ```bash
-npx playwright test tests/visual --project=chromium --update-snapshots
+# Trigger it
+gh workflow run update-visual-baselines.yml
+
+# Once it finishes, download the artifact it produced
+gh run download --name visual-baselines-linux --dir tests/visual
 ```
 
-then commit the resulting `*-linux.png` files alongside the existing `*-darwin.png` ones (Playwright keeps both side by side; whichever platform runs the test picks its own file automatically, so there's no need to delete the Mac ones — they're what makes the tests pass for anyone else on the team developing on macOS).
+Then review the downloaded `*-linux.png` files (they land alongside the existing `*-darwin.png` ones — Playwright keeps both side by side and each platform picks its own automatically, so there's no need to delete the Mac ones) and commit them like any other file.
 
 ### Updating baselines when the app legitimately changes
 
-If a real design change makes the old screenshot outdated (not a bug — an intentional change), regenerate and review the new baseline before committing it:
+If a real design change makes the old screenshot outdated (not a bug — an intentional change), the same workflow handles this too: run it, download the artifact, and look at the diff before committing. Locally, the equivalent command is:
 
 ```bash
 npx playwright test tests/visual --project=chromium --update-snapshots
