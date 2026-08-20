@@ -27,6 +27,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 | [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) | Generates native Playwright tests from Gherkin `.feature` files |
 | [`@axe-core/playwright`](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright) | Automated WCAG accessibility scans (axe-core rule engine) |
 | `expect(page).toHaveScreenshot()` | Visual regression testing — built into `@playwright/test`, no extra dependency |
+| [ESLint](https://eslint.org/) + [`eslint-plugin-playwright`](https://github.com/playwright-community/eslint-plugin-playwright) + [`typescript-eslint`](https://typescript-eslint.io/) | Static analysis — catches Playwright-specific mistakes (missing `await`, empty tests) plus general TS/JS issues |
 | Chromium / Firefox / WebKit | Cross-browser test projects |
 | GitHub Actions | CI — runs the suite on push, PR, and a daily schedule |
 | Discord Webhook | CI pass/fail notifications |
@@ -73,8 +74,11 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 ├── specs/                  # Human-readable test plans (Markdown)
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
+├── eslint.config.js        # ESLint + eslint-plugin-playwright + typescript-eslint rules
 ├── .github/
-│   ├── workflows/          # CI pipeline
+│   ├── workflows/
+│   │   ├── playwright.yml               # Main CI pipeline
+│   │   └── update-visual-baselines.yml  # Manual — regenerates visual regression baselines on Linux
 │   └── dependabot.yml      # Weekly npm + GitHub Actions dependency update PRs
 └── .mcp.json               # Playwright MCP server config
 ```
@@ -94,6 +98,9 @@ npx playwright install
 ## Running Tests
 
 ```bash
+# Type-check the whole project (no test run, no browsers needed)
+npm run typecheck
+
 # Run the full suite headless (all browsers, incl. BDD scenarios)
 npm test
 
@@ -442,17 +449,21 @@ That means a baseline screenshot taken on a Mac and a screenshot taken on Linux 
 - Locally, on a Mac, these tests pass against the macOS baseline already committed.
 - On CI (Linux), the first run will report "no baseline found" for each of these 5 tests and fail — not because anything is actually broken, but because the Linux-named baseline file doesn't exist yet.
 
-**How to fix that (a one-time step):** generate the real baselines on Linux — either inside CI itself, or in a Linux/Docker environment with working network access — by running:
+**How to fix that:** `.github/workflows/update-visual-baselines.yml` exists for exactly this. It's a manual-only (`workflow_dispatch`) workflow that runs on `ubuntu-latest` — the same runner Playwright Tests itself uses — regenerates the baselines with `--update-snapshots`, and uploads them as a downloadable artifact. It does **not** commit automatically; a baseline changing silently, with no human looking at the new image, is exactly the failure mode you don't want from a visual-regression tool.
 
 ```bash
-npx playwright test tests/visual --project=chromium --update-snapshots
+# Trigger it
+gh workflow run update-visual-baselines.yml
+
+# Once it finishes, download the artifact it produced
+gh run download --name visual-baselines-linux --dir tests/visual
 ```
 
-then commit the resulting `*-linux.png` files alongside the existing `*-darwin.png` ones (Playwright keeps both side by side; whichever platform runs the test picks its own file automatically, so there's no need to delete the Mac ones — they're what makes the tests pass for anyone else on the team developing on macOS).
+Then review the downloaded `*-linux.png` files (they land alongside the existing `*-darwin.png` ones — Playwright keeps both side by side and each platform picks its own automatically, so there's no need to delete the Mac ones) and commit them like any other file.
 
 ### Updating baselines when the app legitimately changes
 
-If a real design change makes the old screenshot outdated (not a bug — an intentional change), regenerate and review the new baseline before committing it:
+If a real design change makes the old screenshot outdated (not a bug — an intentional change), the same workflow handles this too: run it, download the artifact, and look at the diff before committing. Locally, the equivalent command is:
 
 ```bash
 npx playwright test tests/visual --project=chromium --update-snapshots
@@ -520,6 +531,20 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 - Manual dispatch
 
 Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
+
+### Linting (ESLint + `eslint-plugin-playwright`)
+
+In plain words: a linter reads the code without running it and flags patterns that are almost always mistakes. This is different from `tsc` (which only checks that types line up) and different from actually running the tests (which only tells you what breaks *this run*, on *this data*). `eslint-plugin-playwright` specifically knows what a correct Playwright test looks like, so it catches a category of bug neither of those other checks would: a missing `await` on an `expect()` (which silently does nothing instead of failing), a `test.skip()` left in by accident, a test that never actually asserts anything. `npm run lint` (`eslint .`) runs it, and CI runs it as its own step, right after installing dependencies, so a real lint error fails the build fast — same fail-fast placement as [type-checking](#continuous-integration).
+
+**A real decision this required, documented rather than hidden:** getting this working meant downgrading the project's `typescript` version from `^7.0.2` to `^5.9.0`. Here's why: `typescript-eslint` (the package that lets ESLint understand `.ts` syntax at all) has a hard-coded runtime check that refuses to run against TypeScript 7 — not a version-range warning, an explicit thrown error (`typescript-eslint does not support TS 7.0`), because TS7 is a genuinely different compiler implementation under the hood and support for it [hasn't shipped yet](https://github.com/typescript-eslint/typescript-eslint/issues/10940). I tried the standard escape hatches first — `npm install --legacy-peer-deps`, and npm's `overrides` field to pin TypeScript to 5.x *only* inside `typescript-eslint`'s own dependency tree while leaving the rest of the project on 7.x — neither actually worked; npm kept collapsing everything back to a single shared `typescript` install, and the hard-coded guard fired regardless. Downgrading the whole project was the only option that actually unblocks linting today.
+
+**What that trades away:** TypeScript 7 removed the old `"moduleResolution": "Node"` setting entirely, which is what originally broke `tsc --noEmit` as a CI gate (see the type-checking section above) — TypeScript 5.9 still supports it, so that specific problem doesn't exist on this version. If `typescript-eslint` ships TS7 support later, upgrading back is a one-line version bump with no config changes needed.
+
+**Two rules needed project-specific configuration, not blanket suppression** — worth explaining *why*, since silencing a lint rule without a reason is exactly the kind of thing that should raise an eyebrow in review:
+
+- `playwright/no-standalone-expect` normally catches an `expect()` call that isn't inside a `test()` block (usually a real mistake — an assertion that never actually runs as part of a test). But every `expect()` in `features/steps/*.steps.ts` lives inside a `Given`/`When`/`Then` callback from `playwright-bdd`, which — once `bddgen` compiles the `.feature` files — *is* the real test body. The rule doesn't know that pattern, so it flagged all ~65 of them as errors. Turned off for `features/steps/**`, with a comment explaining why, rather than silently ignored.
+- `playwright/expect-expect` normally catches a test with no assertions at all (a test that always "passes" because it never actually checks anything). The 5 accessibility tests in `tests/accessibility/*.spec.ts` looked like that to the rule, because their assertion happens inside the shared `expectNoSeriousAccessibilityViolations()` helper (`utils/axe.ts`), not written out inline. Rather than turn the rule off, `eslint.config.js` tells it about the helper (`assertFunctionNames: ['expectNoSeriousAccessibilityViolations']`) — so it still catches a genuinely assertion-less test anywhere else in the suite.
+- `playwright/no-skipped-test` flagged the 5 `tests/visual/*.spec.ts` files for their `test.skip(...)` calls — but that's the deliberate, documented mechanism scoping visual regression to `chromium` only (see [Visual Regression Testing](#visual-regression-testing)), not a forgotten skip. Turned off just for `tests/visual/**`.
 
 ### Speeding up CI (dependency & browser caching)
 
