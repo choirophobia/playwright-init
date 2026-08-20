@@ -57,6 +57,16 @@ Swag Labs (SauceDemo, https://www.saucedemo.com) is a demo e-commerce app used f
     - expect: An error message is displayed stating the Password is required (e.g. 'Epic sadface: Password is required')
     - expect: User remains on the login page
 
+#### 1.4. Direct URL access to protected pages without authentication redirects to login
+
+**File:** `tests/login/unauthenticated-direct-access.spec.ts`
+
+**Steps:**
+  1. Without logging in, navigate directly to each protected route in turn: /inventory.html, /cart.html, /checkout-step-one.html, /checkout-step-two.html, and /checkout-complete.html
+    - expect: For every route, the user is redirected to the login page at https://www.saucedemo.com/
+    - expect: An error banner is displayed reading "Epic sadface: You can only access '<path>' when you are logged in." with the requested path substituted in
+    - expect: The Username and Password fields are empty (no authenticated session was created)
+
 ### 2. Inventory Browsing
 
 **Seed:** `tests/seed.spec.ts`

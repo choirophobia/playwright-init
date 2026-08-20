@@ -508,7 +508,7 @@ Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md
 
 | Area | Spec Files | Covers |
 |---|---|---|
-| **Login** | `tests/login/` (3) | Valid login, invalid credentials, empty-field validation |
+| **Login** | `tests/login/` (4) | Valid login, invalid credentials, empty-field validation, unauthenticated direct-URL access to protected routes |
 | **Inventory** | `tests/inventory/` (6) | Browsing products, sorting the catalog, detail-page/grid cart-state sync, cart state surviving re-sorts, a Reset App State UI-desync gap, and an unguarded invalid product id |
 | **Cart** | `tests/cart/` (4) | Adding single/multiple items, removing items, viewing cart |
 | **Checkout** | `tests/checkout/` (5) | Completing orders (single/multiple items), required-field validation, cancelling checkout, whitespace-only field validation gap |
