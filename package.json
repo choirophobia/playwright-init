@@ -4,16 +4,24 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "playwright test",
-    "test:ui": "playwright test --ui"
+    "bddgen": "bddgen",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run bddgen && playwright test",
+    "test:ui": "npm run bddgen && playwright test --ui"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.61.1",
     "@types/node": "^26.1.1",
-    "typescript": "^7.0.2"
+    "eslint": "^10.8.1",
+    "eslint-plugin-playwright": "^2.11.0",
+    "playwright-bdd": "^9.2.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.67.0"
   }
 }

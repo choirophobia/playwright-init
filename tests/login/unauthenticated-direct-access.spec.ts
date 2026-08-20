@@ -13,6 +13,10 @@ const protectedRoutes = [
 ];
 
 test.describe('Login', () => {
+  // These tests exercise unauthenticated access, so they must start unauthenticated
+  // rather than reusing the storageState from tests/auth.setup.ts.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   for (const route of protectedRoutes) {
     test(`Direct URL access to ${route} without authentication redirects to login`, async ({ page }) => {
       const login = new LoginPage(page);

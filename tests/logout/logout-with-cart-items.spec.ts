@@ -10,9 +10,8 @@ test.describe('Logout', () => {
     const login = new LoginPage(page);
     const inventory = new InventoryPage(page);
 
-    // 1. Start from a fresh browser state, log in, and add 2 items to the cart
-    await login.goto();
-    await login.login('standard_user', 'secret_sauce');
+    // 1. Start already authenticated (see tests/auth.setup.ts) and add 2 items to the cart
+    await page.goto('/inventory.html');
     await inventory.addToCart('sauce-labs-backpack');
     await inventory.addToCart('sauce-labs-bike-light');
 

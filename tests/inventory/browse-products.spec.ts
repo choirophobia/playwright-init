@@ -2,17 +2,14 @@
 // seed: tests/seed.spec.ts
 
 import { test, expect } from '@playwright/test';
-import { LoginPage } from '../../pages/LoginPage';
 import { InventoryPage } from '../../pages/InventoryPage';
 
 test.describe('Inventory Browsing', () => {
   test('Browse the product inventory and view product details', async ({ page }) => {
-    const login = new LoginPage(page);
     const inventory = new InventoryPage(page);
 
-    // 1. Start from a fresh browser state, navigate, and log in
-    await login.goto();
-    await login.login('standard_user', 'secret_sauce');
+    // 1. Start already authenticated (see tests/auth.setup.ts) and go to the Products page
+    await page.goto('/inventory.html');
 
     // expect: User lands on the Products page at /inventory.html
     await expect(page).toHaveURL(/inventory\.html/);
@@ -21,14 +18,16 @@ test.describe('Inventory Browsing', () => {
     await expect(inventory.items).toHaveCount(6);
 
     // expect: Each of the 6 products displays an image, name, short description, price, and an 'Add to cart' button
+    // Soft assertions: check every product even if one is missing a field, instead of
+    // stopping at the first failure and leaving the other 5 products unverified.
     const count = await inventory.items.count();
     for (let i = 0; i < count; i++) {
       const item = inventory.items.nth(i);
-      await expect(inventory.itemImage(item)).toBeVisible();
-      await expect(inventory.itemName(item)).toBeVisible();
-      await expect(inventory.itemDesc(item)).toBeVisible();
-      await expect(inventory.itemPrice(item)).toHaveText(/^\$\d+\.\d{2}$/);
-      await expect(inventory.itemAddToCartButton(item)).toBeVisible();
+      await expect.soft(inventory.itemImage(item)).toBeVisible();
+      await expect.soft(inventory.itemName(item)).toBeVisible();
+      await expect.soft(inventory.itemDesc(item)).toBeVisible();
+      await expect.soft(inventory.itemPrice(item)).toHaveText(/^\$\d+\.\d{2}$/);
+      await expect.soft(inventory.itemAddToCartButton(item)).toBeVisible();
     }
 
     // expect: Default sort order is 'Name (A to Z)' as shown in the sort dropdown

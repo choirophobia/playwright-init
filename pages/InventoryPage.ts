@@ -13,6 +13,7 @@ export class InventoryPage {
   readonly detailDesc: Locator;
   readonly detailPrice: Locator;
   readonly detailAddToCartButton: Locator;
+  readonly detailRemoveButton: Locator;
   readonly backToProductsButton: Locator;
 
   constructor(page: Page) {
@@ -26,6 +27,7 @@ export class InventoryPage {
     this.detailDesc = page.locator('.inventory_details_desc');
     this.detailPrice = page.locator('.inventory_details_price');
     this.detailAddToCartButton = page.getByRole('button', { name: 'Add to cart' });
+    this.detailRemoveButton = page.locator('[data-test="remove"]');
     this.backToProductsButton = page.locator('[data-test="back-to-products"]');
   }
 

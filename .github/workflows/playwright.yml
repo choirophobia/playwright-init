@@ -13,17 +13,41 @@ jobs:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
       with:
         node-version: lts/*
+        cache: 'npm'
     - name: Install dependencies
       run: npm ci
-    - name: Install Playwright Browsers
+    # Fails fast, before installing browsers, on a real lint error. See README:
+    # Continuous Integration.
+    - name: Lint
+      run: npm run lint
+    # Fails fast on a real type error before spending time installing browsers and
+    # running the suite. See README: Continuous Integration.
+    - name: Type-check
+      run: npm run typecheck
+    # Playwright browser binaries (~500MB) are cached separately from npm packages,
+    # keyed on package-lock.json so a Playwright version bump invalidates the cache.
+    # See README: Continuous Integration.
+    - name: Cache Playwright browsers
+      id: playwright-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+    - name: Install Playwright browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: npx playwright install --with-deps
+    - name: Install Playwright OS dependencies (browsers cache hit)
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: npx playwright install-deps
+    - name: Generate BDD tests from .feature files
+      run: npx bddgen
     - name: Run Playwright tests
       run: npx playwright test
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: ${{ !cancelled() }}
       with:
         name: playwright-report
