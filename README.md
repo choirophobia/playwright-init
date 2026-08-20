@@ -94,6 +94,9 @@ npx playwright install
 ## Running Tests
 
 ```bash
+# Type-check the whole project (no test run, no browsers needed)
+npm run typecheck
+
 # Run the full suite headless (all browsers, incl. BDD scenarios)
 npm test
 
@@ -520,6 +523,14 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 - Manual dispatch
 
 Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
+
+### Type-checking as its own CI step
+
+In plain words: writing tests in TypeScript doesn't automatically mean every type error gets caught before the code runs. Playwright doesn't use the real TypeScript compiler to execute tests — it strips the types out with a fast transpiler (`esbuild`) and runs the resulting JavaScript directly. That's what makes `npx playwright test` fast, but it also means a genuine type mistake — passing the wrong argument to a step, a typo'd property name that TypeScript would normally catch — can sit in the codebase indefinitely as long as it doesn't *also* happen to be a runtime error. Nothing in the test run itself checks whether the types actually line up.
+
+`npm run typecheck` runs `tsc --noEmit` — the real TypeScript compiler, in the mode where it only checks for errors and doesn't produce any output files — over every `.ts` file in `pages/`, `tests/`, `features/`, and `utils/`. CI now runs this as its own step, right after installing dependencies and before installing browsers or running anything, so a type error fails the build fast, before spending time on the expensive parts.
+
+**What this actually found:** the existing `tsconfig.json` had `"moduleResolution": "Node"`, an older setting that the TypeScript version in this project's `devDependencies` (`^7.0.2`) has removed outright — running `tsc --noEmit` against the old config failed immediately with "Option 'moduleResolution=node10' has been removed." It also had a leftover `outDir` pointing outside the project and no `types`/`lib` configuration, which was the real cause of a `Cannot find name 'process'` error that had been showing up as an editor-only annoyance in `playwright.config.ts` throughout this project's history — annoying, but silent, because nothing ever actually ran the compiler in a mode that would surface it as a real failure. Fixing the config (adding `strict: true`, `lib: ["ES2021", "DOM"]`, `types: ["node"]`, and an explicit `include` list, dropping the removed option) is what made `tsc --noEmit` usable as a gate at all — this is exactly the kind of "invisible until you actually check" problem this CI step exists to catch going forward.
 
 ### Speeding up CI (dependency & browser caching)
 
