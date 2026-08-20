@@ -521,6 +521,35 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 
 Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
 
+### Speeding up CI (dependency & browser caching)
+
+In plain words: every time this workflow used to run, it started from a completely empty computer — no npm packages, no browsers installed, nothing. So every run re-downloaded the same `node_modules` and re-downloaded the same ~500MB of Chromium/Firefox/WebKit browser binaries, even though yesterday's run downloaded the *exact same files*. That happens on every push, every PR, and every day at the scheduled run — a lot of repeated downloading of things that hadn't changed. Caching just means: save those files somewhere after downloading them once, and next time, check "do I already have this?" before downloading again.
+
+This workflow now caches two separate things, because they're genuinely different in size and how often they change:
+
+1. **npm packages** — one line, `cache: 'npm'` on the existing `actions/setup-node` step. GitHub Actions handles the rest: it saves `node_modules` keyed on `package-lock.json`, and restores it on the next run if the lockfile hasn't changed.
+
+2. **Playwright's browser binaries** — these live outside `node_modules` (Playwright downloads them separately, to `~/.cache/ms-playwright`), so `setup-node`'s npm cache doesn't cover them. A separate `actions/cache` step handles this one, keyed the same way (on `package-lock.json`, since that's what pins the `@playwright/test` version, which is what determines which browser builds are needed):
+
+   ```yaml
+   - name: Cache Playwright browsers
+     id: playwright-cache
+     uses: actions/cache@v4
+     with:
+       path: ~/.cache/ms-playwright
+       key: playwright-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+   - name: Install Playwright browsers
+     if: steps.playwright-cache.outputs.cache-hit != 'true'
+     run: npx playwright install --with-deps
+   - name: Install Playwright OS dependencies (browsers cache hit)
+     if: steps.playwright-cache.outputs.cache-hit == 'true'
+     run: npx playwright install-deps
+   ```
+
+   On a cache **miss** (first run, or `@playwright/test` was just bumped — e.g. by the Dependabot PRs described below), it does the full `install --with-deps`, which downloads the browsers *and* the OS-level libraries they need to run on a fresh Ubuntu runner, and that download gets saved for next time. On a cache **hit**, the browser binaries are already sitting on disk, so it skips straight past that download — but it still runs `install-deps` (fast — just the OS package installs, no ~500MB browser download) because the runner itself is a brand-new virtual machine every single time, regardless of what got cached.
+
+**Why key on `package-lock.json` instead of something simpler:** it keeps the cache honest. If the cache key never changed, an old cached browser build could silently stick around after `@playwright/test` gets upgraded (say, via one of the Dependabot PRs), and tests would run against a browser version that no longer matches what's declared in `package.json`. Tying the key to the lockfile means a version bump automatically invalidates the old cache and forces a fresh, matching download — the cache can only ever serve exactly the version this repo currently expects, nothing older.
+
 ### PR annotations (`github` reporter)
 
 `playwright.config.ts` sets `reporter: process.env.CI ? [['html'], ['github']] : 'html'` — locally you still get just the HTML report, but on CI, Playwright's built-in `github` reporter runs alongside it. It's part of `@playwright/test` itself (no extra dependency, no extra workflow step), and it turns each test failure into a [workflow command](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions) (`::error file=...,line=...::`) that GitHub Actions renders as an inline annotation directly on the changed lines of a PR diff, plus a run summary annotation with the pass/fail counts.
