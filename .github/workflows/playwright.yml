@@ -20,6 +20,10 @@ jobs:
         cache: 'npm'
     - name: Install dependencies
       run: npm ci
+    # Fails fast on a real type error before spending time installing browsers and
+    # running the suite. See README: Continuous Integration.
+    - name: Type-check
+      run: npm run typecheck
     # Playwright browser binaries (~500MB) are cached separately from npm packages,
     # keyed on package-lock.json so a Playwright version bump invalidates the cache.
     # See README: Continuous Integration.
