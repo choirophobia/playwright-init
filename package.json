@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "bddgen": "bddgen",
+    "lint": "eslint .",
     "test": "npm run bddgen && playwright test",
     "test:ui": "npm run bddgen && playwright test --ui"
   },
@@ -16,7 +17,10 @@
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.61.1",
     "@types/node": "^26.1.1",
+    "eslint": "^10.8.1",
+    "eslint-plugin-playwright": "^2.11.0",
     "playwright-bdd": "^9.2.0",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.67.0"
   }
 }

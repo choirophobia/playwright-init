@@ -27,6 +27,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 | [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) | Generates native Playwright tests from Gherkin `.feature` files |
 | [`@axe-core/playwright`](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright) | Automated WCAG accessibility scans (axe-core rule engine) |
 | `expect(page).toHaveScreenshot()` | Visual regression testing — built into `@playwright/test`, no extra dependency |
+| [ESLint](https://eslint.org/) + [`eslint-plugin-playwright`](https://github.com/playwright-community/eslint-plugin-playwright) + [`typescript-eslint`](https://typescript-eslint.io/) | Static analysis — catches Playwright-specific mistakes (missing `await`, empty tests) plus general TS/JS issues |
 | Chromium / Firefox / WebKit | Cross-browser test projects |
 | GitHub Actions | CI — runs the suite on push, PR, and a daily schedule |
 | Discord Webhook | CI pass/fail notifications |
@@ -73,6 +74,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 ├── specs/                  # Human-readable test plans (Markdown)
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
+├── eslint.config.js        # ESLint + eslint-plugin-playwright + typescript-eslint rules
 ├── .github/
 │   ├── workflows/          # CI pipeline
 │   └── dependabot.yml      # Weekly npm + GitHub Actions dependency update PRs
@@ -94,6 +96,9 @@ npx playwright install
 ## Running Tests
 
 ```bash
+# Lint the whole project (no test run, no browsers needed)
+npm run lint
+
 # Run the full suite headless (all browsers, incl. BDD scenarios)
 npm test
 
@@ -520,6 +525,20 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 - Manual dispatch
 
 Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
+
+### Linting (ESLint + `eslint-plugin-playwright`)
+
+In plain words: a linter reads the code without running it and flags patterns that are almost always mistakes. This is different from `tsc` (which only checks that types line up) and different from actually running the tests (which only tells you what breaks *this run*, on *this data*). `eslint-plugin-playwright` specifically knows what a correct Playwright test looks like, so it catches a category of bug neither of those other checks would: a missing `await` on an `expect()` (which silently does nothing instead of failing), a `test.skip()` left in by accident, a test that never actually asserts anything. `npm run lint` (`eslint .`) runs it, and CI runs it as its own step, right after installing dependencies, so a real lint error fails the build fast — same fail-fast placement as [type-checking](#continuous-integration).
+
+**A real decision this required, documented rather than hidden:** getting this working meant downgrading the project's `typescript` version from `^7.0.2` to `^5.9.0`. Here's why: `typescript-eslint` (the package that lets ESLint understand `.ts` syntax at all) has a hard-coded runtime check that refuses to run against TypeScript 7 — not a version-range warning, an explicit thrown error (`typescript-eslint does not support TS 7.0`), because TS7 is a genuinely different compiler implementation under the hood and support for it [hasn't shipped yet](https://github.com/typescript-eslint/typescript-eslint/issues/10940). I tried the standard escape hatches first — `npm install --legacy-peer-deps`, and npm's `overrides` field to pin TypeScript to 5.x *only* inside `typescript-eslint`'s own dependency tree while leaving the rest of the project on 7.x — neither actually worked; npm kept collapsing everything back to a single shared `typescript` install, and the hard-coded guard fired regardless. Downgrading the whole project was the only option that actually unblocks linting today.
+
+**What that trades away:** TypeScript 7 removed the old `"moduleResolution": "Node"` setting entirely, which is what originally broke `tsc --noEmit` as a CI gate (see the type-checking section above) — TypeScript 5.9 still supports it, so that specific problem doesn't exist on this version. If `typescript-eslint` ships TS7 support later, upgrading back is a one-line version bump with no config changes needed.
+
+**Two rules needed project-specific configuration, not blanket suppression** — worth explaining *why*, since silencing a lint rule without a reason is exactly the kind of thing that should raise an eyebrow in review:
+
+- `playwright/no-standalone-expect` normally catches an `expect()` call that isn't inside a `test()` block (usually a real mistake — an assertion that never actually runs as part of a test). But every `expect()` in `features/steps/*.steps.ts` lives inside a `Given`/`When`/`Then` callback from `playwright-bdd`, which — once `bddgen` compiles the `.feature` files — *is* the real test body. The rule doesn't know that pattern, so it flagged all ~65 of them as errors. Turned off for `features/steps/**`, with a comment explaining why, rather than silently ignored.
+- `playwright/expect-expect` normally catches a test with no assertions at all (a test that always "passes" because it never actually checks anything). The 5 accessibility tests in `tests/accessibility/*.spec.ts` looked like that to the rule, because their assertion happens inside the shared `expectNoSeriousAccessibilityViolations()` helper (`utils/axe.ts`), not written out inline. Rather than turn the rule off, `eslint.config.js` tells it about the helper (`assertFunctionNames: ['expectNoSeriousAccessibilityViolations']`) — so it still catches a genuinely assertion-less test anywhere else in the suite.
+- `playwright/no-skipped-test` flagged the 5 `tests/visual/*.spec.ts` files for their `test.skip(...)` calls — but that's the deliberate, documented mechanism scoping visual regression to `chromium` only (see [Visual Regression Testing](#visual-regression-testing)), not a forgotten skip. Turned off just for `tests/visual/**`.
 
 ### Speeding up CI (dependency & browser caching)
 
