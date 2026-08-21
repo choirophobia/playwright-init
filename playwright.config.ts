@@ -50,13 +50,19 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   /*
    * Reporter to use. See https://playwright.dev/docs/test-reporters
-   * On CI, adds Playwright's built-in `github` reporter alongside the HTML report: it
-   * turns test failures into inline annotations on the PR diff in GitHub's UI, using
-   * the `::error::` workflow command — no extra dependency, no extra CI step, since
-   * Playwright ships it and .github/workflows/playwright.yml already sets CI=true.
+   * On CI, adds two reporters alongside the HTML report:
+   * - `github`: turns test failures into inline annotations on the PR diff in GitHub's
+   *   UI, using the `::error::` workflow command — no extra dependency, no extra CI
+   *   step, since Playwright ships it and .github/workflows/playwright.yml already
+   *   sets CI=true.
+   * - `json`: written to playwright-report/results.json, which
+   *   scripts/discord-notify.mjs parses to build a per-browser-project pass/fail
+   *   breakdown for the Discord notification.
    * See README: Continuous Integration.
    */
-  reporter: process.env.CI ? [['html'], ['github']] : 'html',
+  reporter: process.env.CI
+    ? [['html'], ['github'], ['json', { outputFile: 'playwright-report/results.json' }]]
+    : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */

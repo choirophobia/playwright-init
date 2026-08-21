@@ -30,7 +30,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 | [ESLint](https://eslint.org/) + [`eslint-plugin-playwright`](https://github.com/playwright-community/eslint-plugin-playwright) + [`typescript-eslint`](https://typescript-eslint.io/) | Static analysis — catches Playwright-specific mistakes (missing `await`, empty tests) plus general TS/JS issues |
 | Chromium / Firefox / WebKit | Cross-browser test projects |
 | GitHub Actions | CI — runs the suite on push, PR, and a daily schedule |
-| Discord Webhook | CI pass/fail notifications |
+| Discord Webhook | CI notifications — per-browser-project pass/fail breakdown, built from Playwright's `json` reporter |
 | [Dependabot](https://docs.github.com/en/code-security/dependabot) | Weekly automated PRs for npm and GitHub Actions dependency updates |
 
 ## Project Structure
@@ -75,6 +75,8 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
 ├── eslint.config.js        # ESLint + eslint-plugin-playwright + typescript-eslint rules
+├── scripts/
+│   └── discord-notify.mjs  # Per-browser-project pass/fail Discord notification — see Continuous Integration
 ├── .github/
 │   ├── workflows/
 │   │   ├── playwright.yml               # Main CI pipeline
@@ -530,7 +532,7 @@ GitHub Actions workflow (`.github/workflows/playwright.yml`) runs on:
 - A daily schedule (06:00 WIB / 23:00 UTC)
 - Manual dispatch
 
-Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a pass/fail notification to Discord via webhook.
+Each run installs dependencies and browsers, generates the BDD test files (`npx bddgen`), executes the full suite, uploads the HTML report as a build artifact (30-day retention), and posts a per-browser pass/fail breakdown to Discord via webhook.
 
 ### Linting (ESLint + `eslint-plugin-playwright`)
 
@@ -580,6 +582,52 @@ This workflow now caches two separate things, because they're genuinely differen
 `playwright.config.ts` sets `reporter: process.env.CI ? [['html'], ['github']] : 'html'` — locally you still get just the HTML report, but on CI, Playwright's built-in `github` reporter runs alongside it. It's part of `@playwright/test` itself (no extra dependency, no extra workflow step), and it turns each test failure into a [workflow command](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions) (`::error file=...,line=...::`) that GitHub Actions renders as an inline annotation directly on the changed lines of a PR diff, plus a run summary annotation with the pass/fail counts.
 
 This sits between the two reporting options discussed for this project: a bare HTML artifact (you have to open it to know anything went wrong) and a full external dashboard like Allure (real value, but a Java runtime, an extra CI step, and persistent storage to get it — see the trade-off note this project settled on). The `github` reporter is the free middle ground — zero setup cost, and failures show up exactly where a reviewer is already looking, without needing to click into the Discord notification or download the HTML artifact first.
+
+### Per-browser Discord notifications
+
+The original Discord message just said "passed" or "failed" for the whole run — useful for a yes/no glance, but it couldn't answer "did every browser actually pass, or did one of them fail while the others covered for it?" without opening the HTML report. Since this suite runs across 11 browser projects (5 for the plain suite — `chromium`, `firefox`, `webkit`, `Mobile Chrome`, `Mobile Safari` — plus 6 for the BDD suite), that's a real gap: a single failing project buried among ten passing ones is exactly the kind of thing a glance at a chat notification should be able to tell you.
+
+**How it's wired up:**
+
+1. `playwright.config.ts` adds a third reporter on CI, alongside `html` and `github`: `['json', { outputFile: 'playwright-report/results.json' }]`. Playwright's JSON reporter writes every test's result, including which project (`projectName`) it ran under — that's the raw data the per-browser breakdown is built from.
+2. `scripts/discord-notify.mjs` reads that file, tallies passed/failed/flaky/skipped per project, and posts a Discord embed with two fields — one for the desktop/mobile browsers, one for the BDD browsers — each showing every project on its own line with a ✅/❌/⚪ icon. The workflow's "Notify Discord" step is now just `run: node scripts/discord-notify.mjs`, replacing the inline `jq`/`curl` script that only ever knew the overall job status.
+3. A project that didn't run at all (e.g. if you scope a manual `workflow_dispatch` run to a subset of tests) shows up as ⚪ "no tests ran" rather than being silently omitted — the list of projects the script checks is fixed, not derived from what happened to run, so a project going missing from the message would be as visible as one failing.
+
+Example of what actually posts to Discord for a fully green run:
+
+```
+✅ Playwright Tests passed
+Branch: `main`
+Run: https://github.com/.../actions/runs/...
+
+Desktop & Mobile Browsers
+✅ chromium: 37 passed (37)
+✅ firefox: 32 passed, 5 skipped (37)
+✅ webkit: 32 passed, 5 skipped (37)
+✅ Mobile Chrome: 32 passed, 5 skipped (37)
+✅ Mobile Safari: 32 passed, 5 skipped (37)
+
+BDD (Cucumber) Browsers
+✅ bdd-chromium: 5 passed (5)
+✅ bdd-firefox: 5 passed (5)
+✅ bdd-webkit: 5 passed (5)
+✅ bdd-chromium-auth: 30 passed (30)
+✅ bdd-firefox-auth: 30 passed (30)
+✅ bdd-webkit-auth: 30 passed (30)
+```
+
+(The 5 skips on `firefox`/`webkit`/`Mobile Chrome`/`Mobile Safari` are the visual regression tests — expected, since those baselines are chromium-only. See [Visual Regression Testing](#visual-regression-testing).)
+
+**Also fixes a real bug found along the way:** the old inline script would `curl` an empty `DISCORD_WEBHOOK` and fail the whole job on any Dependabot-triggered run — GitHub withholds repository secrets from those runs by default, so `DISCORD_WEBHOOK` is always empty there, regardless of whether the actual tests passed. `scripts/discord-notify.mjs` checks for that and exits `0` with a log line instead of erroring, so a Dependabot PR's CI status now genuinely reflects whether the tests passed, not whether a notification happened to succeed.
+
+**To test the formatting without sending a real Discord message:**
+
+```bash
+CI=true npx playwright test  # generates playwright-report/results.json
+JOB_STATUS=success BRANCH=main RUN_URL=https://example.com node scripts/discord-notify.mjs --dry-run
+```
+
+`--dry-run` prints the exact JSON payload that would be POSTed, without a webhook or network call.
 
 ### Keeping dependencies up to date (Dependabot)
 
