@@ -53,6 +53,8 @@ jobs:
         name: playwright-report
         path: playwright-report/
         retention-days: 30
+    # Parses playwright-report/results.json (the `json` reporter output) into a
+    # per-browser-project pass/fail/skip breakdown. See README: Continuous Integration.
     - name: Notify Discord
       if: always()
       env:
@@ -60,18 +62,4 @@ jobs:
         JOB_STATUS: ${{ job.status }}
         BRANCH: ${{ github.ref_name }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: |
-        if [ "$JOB_STATUS" = "success" ]; then
-          COLOR=3066993
-          TITLE="✅ Playwright Tests passed"
-        else
-          COLOR=15158332
-          TITLE="❌ Playwright Tests failed"
-        fi
-        PAYLOAD=$(jq -n \
-          --arg title "$TITLE" \
-          --arg branch "$BRANCH" \
-          --arg url "$RUN_URL" \
-          --argjson color "$COLOR" \
-          '{embeds: [{title: $title, description: ("Branch: `" + $branch + "`\nRun: " + $url), color: $color}]}')
-        curl -sfS -H "Content-Type: application/json" -X POST "$DISCORD_WEBHOOK" -d "$PAYLOAD"
+      run: node scripts/discord-notify.mjs
