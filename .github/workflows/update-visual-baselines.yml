@@ -24,7 +24,7 @@ jobs:
       run: npx playwright install --with-deps chromium
     - name: Regenerate visual regression baselines
       run: npx playwright test tests/visual --project=chromium --update-snapshots
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: visual-baselines-linux
         path: tests/visual/**/*-snapshots/**
