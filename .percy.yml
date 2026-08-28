@@ -1,0 +1,7 @@
+version: 2
+snapshot:
+  # Matches the desktop-only scope tests/visual/*.spec.ts previously covered with
+  # local Playwright baselines. Add more widths here to get responsive visual
+  # coverage for free — Percy renders every width from a single percySnapshot() call,
+  # no extra test code needed. See README: Visual Regression Testing.
+  widths: [1280]

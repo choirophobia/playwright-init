@@ -26,7 +26,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 | TypeScript | Static typing for tests and page objects |
 | [`playwright-bdd`](https://vitalets.github.io/playwright-bdd/) | Generates native Playwright tests from Gherkin `.feature` files |
 | [`@axe-core/playwright`](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright) | Automated WCAG accessibility scans (axe-core rule engine) |
-| `expect(page).toHaveScreenshot()` | Visual regression testing — built into `@playwright/test`, no extra dependency |
+| [Percy](https://percy.io) (`@percy/cli` + `@percy/playwright`) | Visual regression testing — cloud-rendered snapshots, no committed baseline PNGs |
 | [ESLint](https://eslint.org/) + [`eslint-plugin-playwright`](https://github.com/playwright-community/eslint-plugin-playwright) + [`typescript-eslint`](https://typescript-eslint.io/) | Static analysis — catches Playwright-specific mistakes (missing `await`, empty tests) plus general TS/JS issues |
 | Chromium / Firefox / WebKit | Cross-browser test projects |
 | GitHub Actions | CI — runs the suite on push, PR, and a daily schedule |
@@ -51,8 +51,7 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   ├── checkout/           # Authenticated via saved storage state
 │   ├── logout/             # Authenticated via saved storage state
 │   ├── accessibility/      # axe-core scans of each core page — see Accessibility Testing
-│   ├── visual/              # Screenshot comparisons of each core page — see Visual Regression Testing
-│   │   └── *.spec.ts-snapshots/  # Committed baseline PNGs, one folder per spec file
+│   ├── visual/              # Percy snapshot captures of each core page — see Visual Regression Testing
 │   └── seed.spec.ts        # Blank seed test used by the AI test generator
 ├── features/                 # Gherkin BDD scenarios (playwright-bdd)
 │   ├── login.feature        # Same login coverage as tests/login/, untagged (unauthenticated)
@@ -75,12 +74,12 @@ End-to-end test automation for [Swag Labs](https://www.saucedemo.com), a demo e-
 │   └── basic-operations.md
 ├── playwright.config.ts    # Base URL, browsers, reporter, trace, BDD settings
 ├── eslint.config.js        # ESLint + eslint-plugin-playwright + typescript-eslint rules
+├── .percy.yml              # Percy snapshot widths — see Visual Regression Testing
 ├── scripts/
 │   └── discord-notify.mjs  # Per-browser-project pass/fail Discord notification — see Continuous Integration
 ├── .github/
 │   ├── workflows/
-│   │   ├── playwright.yml               # Main CI pipeline
-│   │   └── update-visual-baselines.yml  # Manual — regenerates visual regression baselines on Linux
+│   │   └── playwright.yml  # Main CI pipeline
 │   └── dependabot.yml      # Weekly npm + GitHub Actions dependency update PRs
 └── .mcp.json               # Playwright MCP server config
 ```
@@ -426,52 +425,49 @@ This means the suite stays 100% green while still telling the truth about what i
 
 ### What this is, in plain words
 
-Every other test in this suite checks *behavior*: click this button, does the cart badge say "1"? Those checks can all pass while the page still looks broken — a button 20 pixels out of place, a color that silently changed, text overlapping an image. Nothing about "does the button work when clicked" catches "does the button look right." Visual regression testing closes that gap: it takes a screenshot of the page, compares it pixel-by-pixel against a saved "reference photo" from before, and fails the test if they don't match closely enough.
+Every other test in this suite checks *behavior*: click this button, does the cart badge say "1"? Those checks can all pass while the page still looks broken — a button 20 pixels out of place, a color that silently changed, text overlapping an image. Nothing about "does the button work when clicked" catches "does the button look right." Visual regression testing closes that gap: it takes a snapshot of the page, compares it against a saved "reference photo" from before, and flags a diff if they don't match closely enough.
 
-### How it's wired up
+### How it's wired up: Percy
 
 `tests/visual/*.spec.ts` — one file per core page (login, products, cart, checkout information, checkout overview), same 5 pages the accessibility suite covers. Each one navigates to the page the same way its functional test does, then calls:
 
 ```ts
-await expect(page).toHaveScreenshot('login-page.png', { fullPage: true });
+await percySnapshot(page, 'Login page');
 ```
 
-`toHaveScreenshot()` is built into `@playwright/test` — no new dependency. The first time it runs for a given name, it saves that screenshot as the "baseline" (the reference photo) into a `*-snapshots/` folder next to the spec file, and that baseline gets **committed to the repo** like any other file. Every run after that takes a fresh screenshot and compares it against the committed baseline.
+`percySnapshot()` comes from [`@percy/playwright`](https://www.browserstack.com/docs/percy/integrate/playwright), paired with the [`@percy/cli`](https://www.browserstack.com/docs/percy/cli/overview) `percy` binary. Rather than diffing a screenshot taken by the local browser, it captures the page's DOM + computed styles and uploads that to Percy's cloud service, which renders it centrally (via its own rendering fleet) and does the pixel diff there against the previous build. The result — pass/fail plus a visual diff — shows up on the Percy dashboard and as a status check on the PR.
 
-**Scope decision:** these tests only run on the `chromium` project (each spec checks `testInfo.project.name` and skips itself otherwise — you'll see them listed as "skipped," not failed, on `firefox`/`webkit`). And there's no BDD (`features/`) version of this suite — screenshot comparison isn't really a "step" a human would read as a sentence the way `Given/When/Then` is, so mirroring it in Gherkin wouldn't add anything, just duplicate the same picture-taking in a different file.
+**Why this replaced local `toHaveScreenshot()` baselines:** rendering happens on Percy's infrastructure, not the machine running the test, so there's exactly one baseline per snapshot instead of one per OS (see the old gotcha below) — no more separate macOS/Linux baseline files, no committed PNGs, no manual regeneration workflow.
 
-### The gotcha: a screenshot is tied to the computer that took it
-
-This is the part that trips people up, so it's worth explaining plainly: the exact same web page renders as a *slightly different image* depending on the operating system running the browser — different font hinting, different anti-aliasing on curved edges, even though every pixel of actual content is identical. It's not a bug, it's just how each OS draws text and shapes.
-
-That means a baseline screenshot taken on a Mac and a screenshot taken on Linux will **never pixel-match**, even for a page that hasn't changed at all. Playwright knows this and bakes the OS name into the baseline's filename automatically — for example `login-page-chromium-darwin.png` (`darwin` = macOS) versus `login-page-chromium-linux.png`. This project's CI runs on `ubuntu-latest` (Linux).
-
-**The baselines currently committed in this repo were generated on macOS**, because that's the machine available to generate them, and it's important to say that plainly rather than bury it. Practically, that means:
-
-- Locally, on a Mac, these tests pass against the macOS baseline already committed.
-- On CI (Linux), the first run will report "no baseline found" for each of these 5 tests and fail — not because anything is actually broken, but because the Linux-named baseline file doesn't exist yet.
-
-**How to fix that:** `.github/workflows/update-visual-baselines.yml` exists for exactly this. It's a manual-only (`workflow_dispatch`) workflow that runs on `ubuntu-latest` — the same runner Playwright Tests itself uses — regenerates the baselines with `--update-snapshots`, and uploads them as a downloadable artifact. It does **not** commit automatically; a baseline changing silently, with no human looking at the new image, is exactly the failure mode you don't want from a visual-regression tool.
+**How to run it:**
 
 ```bash
-# Trigger it
-gh workflow run update-visual-baselines.yml
+# npm test already wraps this — percy exec starts a local relay server that
+# percySnapshot() posts to, then uploads the finished build to Percy's API
+npm test
 
-# Once it finishes, download the artifact it produced
-gh run download --name visual-baselines-linux --dir tests/visual
+# Or scoped to just the visual suite
+npx percy exec -- npx playwright test tests/visual --project=chromium
 ```
 
-Then review the downloaded `*-linux.png` files (they land alongside the existing `*-darwin.png` ones — Playwright keeps both side by side and each platform picks its own automatically, so there's no need to delete the Mac ones) and commit them like any other file.
+Needs a `PERCY_TOKEN` environment variable (from a project on [percy.io](https://percy.io)) to actually upload anything — see [Percy setup](#percy-setup) below. Without one, `percy exec` logs `Skipping visual tests: Missing Percy token` and still runs the wrapped Playwright command normally, so the rest of the suite isn't blocked by a missing token (this is also what happens automatically on Dependabot-triggered CI runs, which don't get repository secrets).
 
-### Updating baselines when the app legitimately changes
+**Scope decision:** these tests only run on the `chromium` project (each spec checks `testInfo.project.name` and skips itself otherwise — you'll see them listed as "skipped," not failed, on `firefox`/`webkit`). Percy renders its own configured widths/browsers server-side from that one capture, so running the same capture again on other local browser projects wouldn't add coverage. And there's no BDD (`features/`) version of this suite — a snapshot call isn't really a "step" a human would read as a sentence the way `Given/When/Then` is, so mirroring it in Gherkin wouldn't add anything, just duplicate the same capture in a different file.
 
-If a real design change makes the old screenshot outdated (not a bug — an intentional change), the same workflow handles this too: run it, download the artifact, and look at the diff before committing. Locally, the equivalent command is:
+### Percy setup
 
-```bash
-npx playwright test tests/visual --project=chromium --update-snapshots
-```
+1. Create a project at [percy.io](https://percy.io) (or via BrowserStack, which now owns Percy) and copy its project token.
+2. Add it as a repo secret named `PERCY_TOKEN` (Settings → Secrets and variables → Actions) so `.github/workflows/playwright.yml` can pass it through.
+3. For local runs, export it in your shell: `export PERCY_TOKEN=percy_xxxxx`.
+4. `.percy.yml` pins the snapshot width to `[1280]`, matching the desktop-only scope the old local baselines covered. Add more widths there to get responsive visual coverage for free — Percy renders every width from the same `percySnapshot()` call, no extra test code needed.
 
-Then look at the diff of the new PNG (`npx playwright show-report` shows a side-by-side before/after for any run that failed a comparison) to confirm the change is the one you expected, and commit it like any other file.
+### Reviewing and approving diffs
+
+Percy doesn't fail a build just because pixels changed — a build that introduces visual diffs shows as "unreviewed" until a human looks at the side-by-side comparison on the Percy dashboard and either approves it (the change was intentional — e.g. a real design update) or flags it as a regression. That review step is the direct replacement for this project's old `git diff`-the-PNG workflow: same judgment call, now made in Percy's UI instead of by re-running `--update-snapshots` and eyeballing a downloaded file.
+
+### The gotcha this replaced
+
+Worth remembering why this migration happened: the exact same web page renders as a *slightly different image* depending on the operating system running the browser — different font hinting, different anti-aliasing on curved edges, even though every pixel of actual content is identical. With local `toHaveScreenshot()` baselines, that meant a screenshot taken on a Mac and one taken on Linux would **never pixel-match**, even for a page that hadn't changed at all — Playwright had to bake the OS into the baseline filename (`login-page-chromium-darwin.png` vs. `-linux.png`) and this repo needed a whole manual `workflow_dispatch` workflow just to generate Linux-side baselines to commit. Percy sidesteps this entirely by rendering every snapshot on its own infrastructure, so there's only ever one baseline per snapshot, independent of whoever's machine triggered the capture.
 
 ## Mobile & Responsive Testing
 
@@ -516,7 +512,7 @@ Scenarios are defined in [`specs/basic-operations.md`](specs/basic-operations.md
 | **Checkout** | `tests/checkout/` (5) | Completing orders (single/multiple items), required-field validation, cancelling checkout, whitespace-only field validation gap |
 | **Logout** | `tests/logout/` (2) | Logging out, logging out with items still in cart |
 | **Accessibility** | `tests/accessibility/` (6) | axe-core scans of login, products, cart, and both checkout steps for `critical`/`serious` WCAG violations; documents one known gap (products page sort dropdown missing an accessible name) — see [Accessibility Testing](#accessibility-testing) |
-| **Visual Regression** | `tests/visual/` (5, `chromium` only) | Screenshot comparisons of login, products, cart, and both checkout steps against a committed baseline; no BDD equivalent — see [Visual Regression Testing](#visual-regression-testing) |
+| **Visual Regression** | `tests/visual/` (5, `chromium` only) | Percy snapshot captures of login, products, cart, and both checkout steps, diffed on Percy's cloud infrastructure; no BDD equivalent — see [Visual Regression Testing](#visual-regression-testing) |
 | **Login (BDD)** | `features/login.feature` (3 scenario definitions → 4 generated tests) | Same login coverage as `tests/login/`, expressed as Gherkin; the blank-required-field case is a Scenario Outline — see [BDD Tests](#bdd-tests-cucumber) |
 | **Cart (BDD)** | `features/cart.feature` (4 scenarios) | Same cart coverage as `tests/cart/`, expressed as Gherkin and tagged `@auth` — see [BDD Tests](#bdd-tests-cucumber) |
 | **Checkout (BDD)** | `features/checkout.feature` (6 scenario definitions → 8 generated tests) | Same checkout coverage as `tests/checkout/`, expressed as Gherkin and tagged `@auth`; required-field validation is a Scenario Outline — see [BDD Tests](#bdd-tests-cucumber) |

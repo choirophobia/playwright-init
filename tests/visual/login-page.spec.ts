@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import percySnapshot from '@percy/playwright';
 import { LoginPage } from '../../pages/LoginPage';
 
 test.describe('Visual Regression', () => {
@@ -6,13 +7,14 @@ test.describe('Visual Regression', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test('Login page matches its visual baseline', async ({ page }, testInfo) => {
-    // Visual baselines are only maintained for chromium — see README: Visual Regression Testing.
-    test.skip(testInfo.project.name !== 'chromium', 'Visual baselines are chromium-only');
+    // Percy renders snapshots itself across configured browsers/widths — see README:
+    // Visual Regression Testing. One local capture is enough.
+    test.skip(testInfo.project.name !== 'chromium', 'Visual snapshots only need to be captured once');
 
     const login = new LoginPage(page);
     await login.goto();
     await expect(login.heading).toBeVisible();
 
-    await expect(page).toHaveScreenshot('login-page.png', { fullPage: true });
+    await percySnapshot(page, 'Login page');
   });
 });

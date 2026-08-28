@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
+import percySnapshot from '@percy/playwright';
 import { InventoryPage } from '../../pages/InventoryPage';
 
 test.describe('Visual Regression', () => {
   test('Products page matches its visual baseline', async ({ page }, testInfo) => {
-    // Visual baselines are only maintained for chromium — see README: Visual Regression Testing.
-    test.skip(testInfo.project.name !== 'chromium', 'Visual baselines are chromium-only');
+    // Percy renders snapshots itself across configured browsers/widths — see README:
+    // Visual Regression Testing. One local capture is enough.
+    test.skip(testInfo.project.name !== 'chromium', 'Visual snapshots only need to be captured once');
 
     const inventory = new InventoryPage(page);
 
@@ -12,6 +14,6 @@ test.describe('Visual Regression', () => {
     await page.goto('/inventory.html');
     await expect(inventory.header.title).toHaveText('Products');
 
-    await expect(page).toHaveScreenshot('products-page.png', { fullPage: true });
+    await percySnapshot(page, 'Products page');
   });
 });
