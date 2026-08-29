@@ -82,7 +82,18 @@ export default defineConfig({
 
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'], storageState: authFile },
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: authFile,
+        /*
+         * Screenshot + video on failure, chromium only: video recording adds
+         * per-test overhead (every test is recorded, then discarded unless it
+         * fails) across the whole run, so it's scoped to one project rather than
+         * all 11 to keep CI time down. Attached to the HTML report on failure.
+         */
+        screenshot: 'only-on-failure',
+        video: 'retain-on-failure',
+      },
       dependencies: ['setup'],
     },
 
