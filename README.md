@@ -171,7 +171,7 @@ Key settings in `playwright.config.ts`:
 - **Browsers:** Chromium, Firefox, WebKit (Chromium runs headless by default), plus `Mobile Chrome` (Pixel 5) and `Mobile Safari` (iPhone 12) — see [Mobile & Responsive Testing](#mobile--responsive-testing)
 - **Reporter:** HTML (`playwright-report/`)
 - **Tracing:** captured on first retry
-- **Failure artifacts:** a screenshot (`screenshot: 'only-on-failure'`) and a video recording (`video: 'retain-on-failure'`) are captured only for a failing test and attached to the HTML report — a passing run produces neither, so this doesn't inflate the report for green runs
+- **Failure artifacts:** a screenshot (`screenshot: 'only-on-failure'`) and a video recording (`video: 'retain-on-failure'`) are captured for a failing test and attached to the HTML report, scoped to the `chromium` project only — video recording adds per-test overhead across the whole run (every test is recorded, then discarded unless it fails), so enabling it on all 11 projects would meaningfully slow down CI for coverage this suite already gets from one browser
 - **CI behavior:** `test.only` is forbidden, tests retry twice, and run with a single worker
 - **Projects:** a `setup` project runs `tests/auth.setup.ts` once, and the `chromium`/`firefox`/`webkit`/`bdd-*-auth` projects each depend on it and reuse its saved session (see below)
 
