@@ -30,9 +30,10 @@ module.exports = tseslint.config(
       // "standalone." False positive for this project's BDD architecture.
       'playwright/no-standalone-expect': 'off',
       // These assertions happen inside shared helpers (e.g. utils/axe.ts's
-      // expectNoSeriousAccessibilityViolations) rather than inline in the test body —
-      // tell the rule about the helper instead of turning the check off entirely.
-      'playwright/expect-expect': ['warn', { assertFunctionNames: ['expectNoSeriousAccessibilityViolations'] }],
+      // expectNoSeriousAccessibilityViolations, @percy/playwright's percySnapshot)
+      // rather than inline in the test body — tell the rule about them instead of
+      // turning the check off entirely.
+      'playwright/expect-expect': ['warn', { assertFunctionNames: ['expectNoSeriousAccessibilityViolations', 'percySnapshot'] }],
     },
   },
   {
@@ -40,7 +41,8 @@ module.exports = tseslint.config(
     rules: {
       // Deliberate, documented pattern (README: Visual Regression Testing) — these
       // tests intentionally skip themselves on every project except chromium, since
-      // baselines are only maintained for one browser.
+      // Percy only needs one local capture per page to render its own cross-browser/
+      // width snapshots.
       'playwright/no-skipped-test': 'off',
     },
   },

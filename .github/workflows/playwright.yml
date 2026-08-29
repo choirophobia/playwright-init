@@ -45,8 +45,16 @@ jobs:
       run: npx playwright install-deps
     - name: Generate BDD tests from .feature files
       run: npx bddgen
+    # Wrapping in `percy exec --` lets tests/visual/*.spec.ts's percySnapshot() calls
+    # upload to Percy for cross-browser/width rendering and diffing. PERCY_TOKEN is
+    # empty on Dependabot-triggered runs (secrets are withheld there); `percy exec`
+    # degrades gracefully in that case — it runs the wrapped command normally and just
+    # skips snapshot upload, so the suite itself still runs and reports pass/fail.
+    # See README: Visual Regression Testing.
     - name: Run Playwright tests
-      run: npx playwright test
+      env:
+        PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+      run: npx percy exec -- npx playwright test
     - uses: actions/upload-artifact@v7
       if: ${{ !cancelled() }}
       with:

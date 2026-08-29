@@ -1,12 +1,14 @@
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
+import percySnapshot from '@percy/playwright';
 import { InventoryPage } from '../../pages/InventoryPage';
 import { CartPage } from '../../pages/CartPage';
 import { CheckoutPage } from '../../pages/CheckoutPage';
 
 test.describe('Visual Regression', () => {
   test('Checkout overview step matches its visual baseline', async ({ page }, testInfo) => {
-    // Visual baselines are only maintained for chromium — see README: Visual Regression Testing.
-    test.skip(testInfo.project.name !== 'chromium', 'Visual baselines are chromium-only');
+    // Percy renders snapshots itself across configured browsers/widths — see README:
+    // Visual Regression Testing. One local capture is enough.
+    test.skip(testInfo.project.name !== 'chromium', 'Visual snapshots only need to be captured once');
 
     const inventory = new InventoryPage(page);
     const cart = new CartPage(page);
@@ -20,6 +22,6 @@ test.describe('Visual Regression', () => {
     await checkout.fillInfo('Fikri', 'Ahmadi', '12345');
     await checkout.continueToOverview();
 
-    await expect(page).toHaveScreenshot('checkout-overview-page.png', { fullPage: true });
+    await percySnapshot(page, 'Checkout overview page');
   });
 });
